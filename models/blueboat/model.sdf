@@ -15,81 +15,55 @@
         </inertia>
       </inertial>
 
-      <!-- Realistic 3D Blue Robotics BlueBoat Visual Meshes -->
-      <visual name="blueboat_hulls_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry>
-          <mesh>
-            <uri>model://blueboat/meshes/blueboat_hulls.obj</uri>
-          </mesh>
-        </geometry>
-        <material>
-          <ambient>0.04 0.25 0.65 1.0</ambient>
-          <diffuse>0.06 0.40 0.85 1.0</diffuse>
-          <specular>0.6 0.6 0.6 1.0</specular>
-          <pbr>
-            <metal>
-              <albedo_color>0.06 0.40 0.85 1.0</albedo_color>
-              <roughness>0.25</roughness>
-              <metalness>0.1</metalness>
-            </metal>
-          </pbr>
-        </material>
+      <!-- Port (Left) Pontoon Hull Visual & Collision -->
+      <visual name="left_hull_visual">
+        <pose>0 0.35 0 0 1.57079632679 0</pose>
+        <geometry><capsule><radius>0.12</radius><length>1.10</length></capsule></geometry>
+        <material><ambient>0.9 0.7 0.0 1.0</ambient><diffuse>1.0 0.8 0.0 1.0</diffuse><specular>0.4 0.4 0.4 1.0</specular></material>
       </visual>
 
-      <visual name="blueboat_frame_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry>
-          <mesh>
-            <uri>model://blueboat/meshes/blueboat_frame.obj</uri>
-          </mesh>
-        </geometry>
-        <material>
-          <ambient>0.1 0.1 0.1 1.0</ambient>
-          <diffuse>0.15 0.15 0.15 1.0</diffuse>
-          <specular>0.3 0.3 0.3 1.0</specular>
-          <pbr>
-            <metal>
-              <albedo_color>0.15 0.15 0.15 1.0</albedo_color>
-              <roughness>0.5</roughness>
-              <metalness>0.8</metalness>
-            </metal>
-          </pbr>
-        </material>
-      </visual>
-
-      <visual name="blueboat_antenna_visual">
-        <pose>0 0 0 0 0 0</pose>
-        <geometry>
-          <mesh>
-            <uri>model://blueboat/meshes/blueboat_antenna.obj</uri>
-          </mesh>
-        </geometry>
-        <material>
-          <ambient>0.8 0.8 0.8 1.0</ambient>
-          <diffuse>0.92 0.92 0.95 1.0</diffuse>
-          <specular>0.5 0.5 0.5 1.0</specular>
-          <pbr>
-            <metal>
-              <albedo_color>0.92 0.92 0.95 1.0</albedo_color>
-              <roughness>0.3</roughness>
-              <metalness>0.1</metalness>
-            </metal>
-          </pbr>
-        </material>
-      </visual>
-
-      <!-- Port (Left) Pontoon Hull Collision -->
       <collision name="left_hull_collision">
-        <pose>0 0.30 0 0 1.57079632679 0</pose>
-        <geometry><capsule><radius>0.13</radius><length>1.05</length></capsule></geometry>
+        <pose>0 0.35 0 0 1.57079632679 0</pose>
+        <geometry><capsule><radius>0.12</radius><length>1.10</length></capsule></geometry>
       </collision>
 
-      <!-- Starboard (Right) Pontoon Hull Collision -->
+      <!-- Starboard (Right) Pontoon Hull Visual & Collision -->
+      <visual name="right_hull_visual">
+        <pose>0 -0.35 0 0 1.57079632679 0</pose>
+        <geometry><capsule><radius>0.12</radius><length>1.10</length></capsule></geometry>
+        <material><ambient>0.9 0.7 0.0 1.0</ambient><diffuse>1.0 0.8 0.0 1.0</diffuse><specular>0.4 0.4 0.4 1.0</specular></material>
+      </visual>
+
       <collision name="right_hull_collision">
-        <pose>0 -0.30 0 0 1.57079632679 0</pose>
-        <geometry><capsule><radius>0.13</radius><length>1.05</length></capsule></geometry>
+        <pose>0 -0.35 0 0 1.57079632679 0</pose>
+        <geometry><capsule><radius>0.12</radius><length>1.10</length></capsule></geometry>
       </collision>
+
+      <!-- Crossbars -->
+      <visual name="front_crossbar">
+        <pose>0.3 0 0.1 1.57079632679 0 0</pose>
+        <geometry><cylinder><radius>0.02</radius><length>0.7</length></cylinder></geometry>
+        <material><ambient>0.15 0.15 0.15 1.0</ambient><diffuse>0.2 0.2 0.2 1.0</diffuse></material>
+      </visual>
+
+      <visual name="rear_crossbar">
+        <pose>-0.3 0 0.1 1.57079632679 0 0</pose>
+        <geometry><cylinder><radius>0.02</radius><length>0.7</length></cylinder></geometry>
+        <material><ambient>0.15 0.15 0.15 1.0</ambient><diffuse>0.2 0.2 0.2 1.0</diffuse></material>
+      </visual>
+
+      <!-- Electronics Enclosure -->
+      <visual name="central_deck_visual">
+        <pose>0 0 0.14 0 0 0</pose>
+        <geometry><box><size>0.45 0.35 0.12</size></box></geometry>
+        <material><ambient>0.05 0.1 0.25 1.0</ambient><diffuse>0.1 0.2 0.45 1.0</diffuse></material>
+      </visual>
+
+      <visual name="antenna_mast">
+        <pose>-0.15 0 0.35 0 0 0</pose>
+        <geometry><cylinder><radius>0.015</radius><length>0.3</length></cylinder></geometry>
+        <material><ambient>0.8 0.8 0.8 1.0</ambient><diffuse>0.9 0.9 0.9 1.0</diffuse></material>
+      </visual>
 
       <!-- 1. IMU Sensor (50 Hz) -->
       <sensor name="imu_sensor" type="imu">
@@ -136,7 +110,7 @@
 
       <!-- 4. Ping2 Port-Side Echosounder (GPU LiDAR at +90 deg / port) -->
       <sensor name="ping2_port" type="gpu_lidar">
-        <pose>0.1 0.30 0.05 0 0 1.57079632679</pose>
+        <pose>0.1 0.35 0.05 0 0 1.57079632679</pose>
         <always_on>true</always_on>
         <update_rate>10</update_rate>
         <visualize>true</visualize>
@@ -151,21 +125,21 @@
       </sensor>
     </link>
 
-    <!-- Left Thruster (Blue Robotics T200) -->
+    <!-- Left Thruster -->
     <link name="left_propeller_link">
-      <pose>-0.55 0.30 -0.06 0 0 0</pose>
+      <pose>-0.55 0.35 -0.06 0 0 0</pose>
       <inertial>
         <mass>0.15</mass>
         <inertia><ixx>0.0002</ixx><ixy>0.0</ixy><ixz>0.0</ixz><iyy>0.0001</iyy><iyz>0.0</iyz><izz>0.0001</izz></inertia>
       </inertial>
       <visual name="left_propeller_visual">
         <pose>0 0 0 0 1.57079632679 0</pose>
-        <geometry><cylinder><radius>0.05</radius><length>0.04</length></cylinder></geometry>
-        <material><ambient>0.08 0.15 0.25 1.0</ambient><diffuse>0.1 0.2 0.35 1.0</diffuse><specular>0.5 0.5 0.5 1.0</specular></material>
+        <geometry><cylinder><radius>0.05</radius><length>0.03</length></cylinder></geometry>
+        <material><ambient>0.1 0.1 0.1 1.0</ambient><diffuse>0.15 0.15 0.15 1.0</diffuse></material>
       </visual>
       <collision name="left_propeller_collision">
         <pose>0 0 0 0 1.57079632679 0</pose>
-        <geometry><cylinder><radius>0.05</radius><length>0.04</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.05</radius><length>0.03</length></cylinder></geometry>
       </collision>
     </link>
 
@@ -175,21 +149,21 @@
       <axis><xyz>1 0 0</xyz><limit><lower>-1e16</lower><upper>1e16</upper></limit></axis>
     </joint>
 
-    <!-- Right Thruster (Blue Robotics T200) -->
+    <!-- Right Thruster -->
     <link name="right_propeller_link">
-      <pose>-0.55 -0.30 -0.06 0 0 0</pose>
+      <pose>-0.55 -0.35 -0.06 0 0 0</pose>
       <inertial>
         <mass>0.15</mass>
         <inertia><ixx>0.0002</ixx><ixy>0.0</ixy><ixz>0.0</ixz><iyy>0.0001</iyy><iyz>0.0</iyz><izz>0.0001</izz></inertia>
       </inertial>
       <visual name="right_propeller_visual">
         <pose>0 0 0 0 1.57079632679 0</pose>
-        <geometry><cylinder><radius>0.05</radius><length>0.04</length></cylinder></geometry>
-        <material><ambient>0.08 0.15 0.25 1.0</ambient><diffuse>0.1 0.2 0.35 1.0</diffuse><specular>0.5 0.5 0.5 1.0</specular></material>
+        <geometry><cylinder><radius>0.05</radius><length>0.03</length></cylinder></geometry>
+        <material><ambient>0.1 0.1 0.1 1.0</ambient><diffuse>0.15 0.15 0.15 1.0</diffuse></material>
       </visual>
       <collision name="right_propeller_collision">
         <pose>0 0 0 0 1.57079632679 0</pose>
-        <geometry><cylinder><radius>0.05</radius><length>0.04</length></cylinder></geometry>
+        <geometry><cylinder><radius>0.05</radius><length>0.03</length></cylinder></geometry>
       </collision>
     </link>
 

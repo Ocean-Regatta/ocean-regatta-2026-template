@@ -50,9 +50,9 @@ jobs:
               REMAINING_MIN=$(( (COOLDOWN_SECONDS - DIFF_SECONDS) / 60 ))
               ELAPSED_MIN=$(( DIFF_SECONDS / 60 ))
 
-              COMMENT="### ⏳ Evaluation rejected: 60-minute cooldown active\n\n"
-              COMMENT+="Your last evaluation occurred **${ELAPSED_MIN} minute(s)** ago.\n\n"
-              COMMENT+="To prevent random seed overfitting, please wait **${REMAINING_MIN} more minute(s)** before submitting a new commit."
+              COMMENT="### ⏳ Évaluation refusée : Cooldown de 60 minutes actif\n\n"
+              COMMENT+="Votre dernière évaluation a eu lieu il y a **${ELAPSED_MIN} minute(s)**.\n\n"
+              COMMENT+="Pour éviter le surapprentissage sur la graine aléatoire, veuillez patienter encore **${REMAINING_MIN} minute(s)** avant de soumettre un nouveau commit."
 
               gh pr comment ${PR_NUMBER} --body "${COMMENT}"
               echo "::error::Cooldown active! Wait ${REMAINING_MIN} more minutes before submitting a new commit."
@@ -139,26 +139,26 @@ jobs:
           DRIFT_EXCEEDED=$(jq -r '.critical_drift_exceeded // false' "${RESULT_FILE}")
 
           if [ "${SUCCESS}" = "true" ]; then
-            STATUS_EMOJI="🏆 **COURSE COMPLETED**"
-            COLOR_ALERT="### 🟢 Result: Success!"
+            STATUS_EMOJI="🏆 **PARCOURS VALIDÉ**"
+            COLOR_ALERT="### 🟢 Résultat : Succès !"
           else
-            STATUS_EMOJI="❌ **FAILED / DISQUALIFIED**"
-            COLOR_ALERT="### 🔴 Result: Failed"
+            STATUS_EMOJI="❌ **ÉCHEC / DISQUALIFICATION**"
+            COLOR_ALERT="### 🔴 Résultat : Échec"
           fi
 
           PR_COMMENT="${COLOR_ALERT}\n\n"
-          PR_COMMENT+="| Metric | Result |\n"
+          PR_COMMENT+="| Critère | Résultat |\n"
           PR_COMMENT+="| :--- | :--- |\n"
-          PR_COMMENT+="| **Status** | ${STATUS_EMOJI} |\n"
-          PR_COMMENT+="| **Score Awarded** | **${SCORE} pts** |\n"
-          PR_COMMENT+="| **Simulated Time** | ${SIM_TIME} s |\n"
-          PR_COMMENT+="| **Gates / Markers Cleared** | ${WAYPOINTS} / ${TOTAL_WP} |\n"
-          PR_COMMENT+="| **Pier Collision** | $( [ "${COLLISION}" = "true" ] && echo "Yes 💥" || echo "No ✅" ) |\n"
-          PR_COMMENT+="| **Reason** | *${REASON}* |\n"
-          PR_COMMENT+="| **Archived Version** | \`${{ env.TAG_NAME }}\` |\n\n"
-          PR_COMMENT+="#### 🎥 Replay your run in 3D:\n"
-          PR_COMMENT+="1. Download the artifact **\`gz-replay-pr-${PR_NUMBER}-${{ env.TAG_NAME }}\`** from the Actions tab.\n"
-          PR_COMMENT+="2. Extract the archive and launch:\n"
+          PR_COMMENT+="| **Statut** | ${STATUS_EMOJI} |\n"
+          PR_COMMENT+="| **Score attribué** | **${SCORE} pts** |\n"
+          PR_COMMENT+="| **Temps simulé** | ${SIM_TIME} s |\n"
+          PR_COMMENT+="| **Portes / Balises franchies** | ${WAYPOINTS} / ${TOTAL_WP} |\n"
+          PR_COMMENT+="| **Collision quai** | $( [ "${COLLISION}" = "true" ] && echo "Oui 💥" || echo "Non ✅" ) |\n"
+          PR_COMMENT+="| **Motif** | *${REASON}* |\n"
+          PR_COMMENT+="| **Version archivée** | \`${{ env.TAG_NAME }}\` |\n\n"
+          PR_COMMENT+="#### 🎥 Rejouer votre run en 3D :\n"
+          PR_COMMENT+="1. Téléchargez l'artéfact **\`gz-replay-pr-${PR_NUMBER}-${{ env.TAG_NAME }}\`** depuis l'onglet Actions.\n"
+          PR_COMMENT+="2. Décompressez l'archive et lancez :\n"
           PR_COMMENT+="\`\`\`bash\ngz sim --playback ./output/replay\n\`\`\`\n"
 
           gh pr comment ${PR_NUMBER} --body "${PR_COMMENT}"

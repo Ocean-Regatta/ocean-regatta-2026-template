@@ -4,17 +4,17 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-echo "=== [1/3] Building local Gazebo Jetty Docker image ==="
+echo "=== [1/3] Construction de l'image locale Gazebo Jetty ==="
 docker build \
     -f "${SCRIPT_DIR}/Dockerfile.local" \
     -t ocean-regatta-student-local:2026 \
     "${SCRIPT_DIR}"
 
-echo "=== [2/3] Preparing local replay directory ==="
+echo "=== [2/3] Préparation du dossier de replay local ==="
 mkdir -p "${REPO_ROOT}/local_output/replay"
 chmod -R 777 "${REPO_ROOT}/local_output"
 
-echo "=== [3/3] Executing local simulation sandbox ==="
+echo "=== [3/3] Exécution de la simulation locale en sandbox ==="
 docker run --rm -it \
     -v "${REPO_ROOT}:/workspace" \
     -w /workspace \
@@ -34,9 +34,9 @@ docker run --rm -it \
         python3 starter_kit/student_controller.py &
         STUDENT_PID=$!
         
-        echo "Simulation running (Press Ctrl+C to stop)..."
+        echo "Simulation en cours (Ctrl+C pour arrêter)..."
         wait $STUDENT_PID || true
         kill $GZ_PID 2>/dev/null || true
     '
 
-echo "Simulation complete. Replay available: gz sim --playback ./local_output/replay"
+echo "Simulation terminée. Replay disponible : gz sim --playback ./local_output/replay"

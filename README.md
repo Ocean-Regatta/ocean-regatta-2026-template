@@ -1,159 +1,137 @@
-# Ocean Regatta 2026 — Participant Starter Kit 🚤
+# Ocean Regatta 2026 — Starter Kit Participant 🚤
 
-Welcome to the official starter repository for the **Ocean Regatta 2026** autonomous marine robotics challenge!
-This kit provides everything you need to develop, test, and visualize autonomous navigation algorithms for the **Blue Robotics BlueBoat** uncrewed surface vessel (USV) in the **Gazebo Jetty** simulator.
-
----
-
-## 🎯 Challenge Objectives
-
-Your goal is to program an autonomous Python controller capable of completing the full course within the **180-second** time limit:
-
-1. **Navigate 3 Channel Gates:** Traverse pairs of buoys (red port, green starboard) while handling transverse ocean currents and differential motor dynamics.
-2. **Round the Cardinal Buoy:** Comply with international IALA maritime regulations by rounding the marker on the required quadrant (North in the practice world).
-3. **Traverse the Pier Entry Gate:** Line up accurately with the harbor pier structure.
-4. **Precision Pier Wall Tracking:** Maintain a strict $5.0 \text{ m}$ standoff distance from the pier wall using the port-side Ping2 single-beam acoustic echosounder without colliding with the structure.
-5. **Clear the Pier Exit Gate:** Cross the finish line to complete the regatta!
+Bienvenue dans le dépôt de départ de la compétition d'autonomie marine **Ocean Regatta 2026** !
+Ce kit contient tout le nécessaire pour développer, tester et visualiser vos algorithmes de navigation autonome pour le catamaran **BlueBoat** sous le simulateur **Gazebo Jetty**.
 
 ---
 
-## 📁 Repository Structure
+## 🎯 Objectif du Challenge 2026
+
+Votre objectif est de programmer un contrôleur autonome en Python capable de :
+1. **Franchir 3 portes de chenal** (paires de bouées rouge bâbord et verte tribord) malgré un courant marin transversal et une dissymétrie des moteurs.
+2. **Contourner une balise cardinale** selon la réglementation maritime internationale IALA (dans le monde d'entraînement, une cardinale NORD).
+3. **Franchir la porte d'entrée de la jetée** pour aligner le drone le long du quai.
+4. **Effectuer un suivi de quai** à $5.0 \text{ m}$ du mur à l'aide de l'échosondeur acoustique Ping2 latéral sans jamais heurter la paroi.
+5. **Franchir la porte de sortie de la jetée** pour terminer le parcours dans le temps imparti (180 s).
+
+---
+
+## 📁 Structure du Starter Kit
 
 ```
 participant_template/
 ├── models/
-│   └── blueboat/                # Authentic Blue Robotics BlueBoat 3D model & physics
-│       ├── meshes/              # High-fidelity 3D meshes (hulls, frame, antenna, STL/OBJ)
-│       ├── model.sdf            # Complete SDF specification (sensors, hydrodynamics, thrusters)
-│       └── model.config         # Gazebo model metadata
+│   └── blueboat/                # Modèle SDF complet (hydrodynamique, propulseurs, capteurs)
 ├── worlds/
-│   └── practice_world.sdf       # Official practice environment with ocean plane & buoys
+│   └── practice_world.sdf       # Monde d'entraînement Gazebo officiel
 ├── starter_kit/
-│   ├── student_controller.py    # ✏️ YOUR CODE GOES HERE (only file evaluated on server)
-│   ├── blueboat_driver.py       # Hardware abstraction layer (HAL) for sensors and thrusters
-│   ├── run_docker.sh            # Turnkey Docker launcher for local development & replays
-│   ├── run_local.sh             # Native launcher (if Gazebo Jetty is installed locally)
-│   └── Dockerfile.local         # Development Docker container
-├── scripts/
-│   └── update_leaderboard.py    # Leaderboard & badge management script
+│   ├── student_controller.py    # ✏️ VOTRE CODE ICI (seul fichier évalué sur le serveur)
+│   ├── blueboat_driver.py       # Pilote matériel d'abstraction capteurs/actionneurs
+│   ├── run_docker.sh            # Lancement clé en main sous Docker (recommandé)
+│   ├── run_local.sh             # Lancement en natif (si Gazebo Jetty est installé)
+│   └── Dockerfile.local         # Image Docker de développement local
 └── .github/
     └── workflows/
-        └── evaluate.yml         # Automated GitHub Actions evaluation workflow
+        └── evaluate.yml         # Workflow d'évaluation automatique sur Pull Request
 ```
 
 > [!IMPORTANT]
-> **Golden Rule of Evaluation:**
-> During automated evaluation on the competition servers, **only your `starter_kit/student_controller.py` file is extracted and executed**.
-> The evaluation container provides its own immutable copy of `blueboat_driver.py` and generates an unseen evaluation world with a secret pseudo-random seed.
+> **Règle d'or de l'évaluation :**
+> Lors de l'évaluation automatisée sur les serveurs de la compétition, **seul votre fichier `student_controller.py` est extrait et exécuté**. Le serveur injecte sa propre version officielle et immuable de `blueboat_driver.py` et génère un monde d'évaluation inédit avec une graine aléatoire.
 
 ---
 
-## 🛥️ Blue Robotics BlueBoat 3D Model
+## 👁️ Guide des Capteurs & API
 
-The simulator features an authentic **Blue Robotics BlueBoat** catamaran representation:
-* **True-to-Scale Geometry:** Catamaran hulls ($1.20\text{ m}$ length, $0.93\text{ m}$ beam) with anodized aluminum crossbars and telemetry mast.
-* **Hydrodynamics:** Fossen nonlinear damping and added-mass simulation in 6 DOFs.
-* **Propulsion:** Dual rear-mounted Blue Robotics T200 thrusters with independent differential thrust commands limited to $[-50.0\text{ N}, +50.0\text{ N}]$.
-* **Collision Physics:** Optimized analytical collision capsules ensuring stable contacts and accurate pier collision detection.
+Votre contrôleur reçoit à chaque pas de temps ($10 \text{ Hz}$) un objet `obs: Observation` fourni par le `BlueBoatDriver`.
 
----
+### 1. Caméra Optique Avant (`obs.buoys`)
+Le capteur sémantique simule une caméra optique embarquée :
+* **Champ de vision (FOV) :** $\pm 55^\circ$ devant le drone, portée maximale de $35.0 \text{ mètres}$.
+* **Mesures transmises :** Strictement la distance euclidienne `range` (mètres) et le gisement relatif au cap `bearing` (radians, $>0$ bâbord / $<0$ tribord).
+* **Classification visuelle :**
+  * `color` : `"RED"`, `"GREEN"`, `"YELLOW_BLACK"`
+  * `shape` : `"CYLINDER"`, `"CONE"`, `"CARDINAL"`
+* **Absence d'identifiants de triche :** Aucune étiquette du type `"gate_1_port"` n'est fournie. Les bouées sont simplement triées par distance croissante (`obs.buoys[0]` étant la plus proche).
+* **Sortie naturelle du champ :** Dès que vous franchissez une porte, les bouées passent derrière le drone ($x_{\text{body}} < 0$) et sortent automatiquement du champ de vision. La porte suivante devient instantanément la plus proche !
 
-## 👁️ Sensors & Observation API
-
-At each step of the **$10\text{ Hz}$** control loop, your controller receives an `obs: Observation` dataclass from the `BlueBoatDriver`.
-
-### 1. Forward Optical Perception (`obs.buoys`)
-Simulates an on-board computer vision detector tracking buoys within visual range:
-* **Field of View (FOV):** $\pm 55^\circ$ forward cone, up to $35.0\text{ m}$ range.
-* **Coordinates provided:**
-  * `buoy.distance`: Direct Euclidean range in meters.
-  * `buoy.bearing`: Relative angle to boat heading in radians ($>0$ port / $<0$ starboard).
-  * `buoy.x`: Relative distance ahead along vehicle surge axis (meters).
-  * `buoy.y`: Relative lateral offset along vehicle sway axis (meters, $>0$ port / $<0$ starboard).
-* **Classification tags:**
-  * `buoy.name`: Unique identifier (e.g., `"gate_port_1"`, `"gate_starboard_1"`, `"cardinal_north"`, `"gate_pier_entry_port"`, `"gate_pier_exit_port"`).
-
-#### Polar to Body-Frame Conversion
+#### Conversion Polaire $\rightarrow$ Cartésienne Body Frame
+Pour calculer les coordonnées d'une bouée dans le repère du bateau ($x$ vers l'avant, $y$ vers la gauche) :
 ```python
-x_body = buoy.distance * math.cos(buoy.bearing)
-y_body = buoy.distance * math.sin(buoy.bearing)
+x_body = buoy.range * math.cos(buoy.bearing)
+y_body = buoy.range * math.sin(buoy.bearing)
 ```
 
-### 2. Ping2 Acoustic Echosounder (`obs.ping2`)
-* Mounted at $+90^\circ$ (strictly perpendicular to the vessel's port / left flank).
-* **Distance:** `obs.ping2.distance` (meters, active range $0.5\text{ m}$ to $30.0\text{ m}$).
-* **Validity flag:** `obs.ping2.is_valid` is `True` when echoes are fresh ($< 0.5\text{ s}$) and within operational bounds.
+### 2. Échosondeur Acoustique Ping2 (`obs.ping2`)
+* Orienté à $+90^\circ$ (strictement orienté sur le flanc bâbord / gauche).
+* Mesure la distance à la jetée : `obs.ping2.distance` (mètres, $0.5 \text{ m}$ à $30.0 \text{ m}$).
+* Champ `obs.ping2.is_valid` : vaut `True` si l'écho est récent ($< 0.5 \text{ s}$) et dans la plage valide.
 
-### 3. Inertial Measurement Unit (`obs.imu`)
-* `obs.imu.yaw`: Compass heading in radians ($-\pi$ to $+\pi$, $0 = \text{East}$).
-* `obs.imu.yaw_rate`: Yaw angular velocity in rad/s ($r$, essential for rate damping and PID heading control).
-* `obs.imu.roll`, `obs.imu.pitch`: Vessel attitude angles.
-* `obs.imu.linear_accel_x`, `obs.imu.linear_accel_y`: Linear body accelerations.
+### 3. Centrale Inertielle (`obs.imu`)
+* `obs.imu.yaw` : Cap du drone en radians ($-\pi$ à $+\pi$, $0 = \text{Est}$).
+* `obs.imu.yaw_rate` : Vitesse de lacet en rad/s (dérivée du cap pour l'amortissement).
 
-### 4. GNSS / GPS Receiver (`obs.gps`)
-* `obs.gps.x`, `obs.gps.y`: Metric Cartesian coordinates projected from the reference origin ($48.0^\circ\text{N}, -4.5^\circ\text{W}$).
+### 4. Récepteur GPS (`obs.gps`)
+* `obs.gps.x`, `obs.gps.y` : Position cartésienne locale métrique estimée.
 
 ---
 
-## 🎯 Dynamic Waypoint Capsule Scoring
+## 🎯 Système de Waypoints Capsulaires Dynamiques
 
-Each channel gate and pier alignment checkpoint features a semi-transparent 2.0-meter indicator capsule:
-* **Initial State:** Red ($0\%$ score).
-* **Perfect Precision:** If the boat center passes within **$0.50\text{ m}$** of the capsule midpoint, you receive **$100\%$ of points** and the capsule turns **Pure Green**!
-* **Smooth Interpolation:** Between $0.50\text{ m}$ and $1.0\text{ m}$, score is linearly interpolated with a dynamic Red $\rightarrow$ Green color transition visible in Gazebo.
-* **Cardinal Buoy:** Has no physical capsule to discourage dangerous close quarters. Compliance with the regulatory quadrant is checked geometrically (+250 pts).
+Chaque porte et étape de suivi est matérialisée par une capsule semi-transparente de 2 mètres de large :
+* **Couleur initiale :** Rouge ($0\%$ des points).
+* **Précision maximale :** Si le centre du bateau passe à **moins de 50 cm ($0.50 \text{ m}$)** du centre de la capsule, vous obtenez **$100\%$ des points** et la capsule passe au **Vert pur** !
+* **Dégradé progressif :** Entre 50 cm et 1.0 m, le score est calculé proportionnellement et la couleur effectue un fondu dynamique (Fade Rouge $\rightarrow$ Vert) visible dans Gazebo.
+
+> [!NOTE]
+> **Bouée cardinale :** Aucune capsule n'est placée sur la cardinale afin de ne pas encourager le rase-cailloux dangereux. L'arbitre valide automatiquement le bon quadrant de passage (+250 pts).
 
 ---
 
-## 💻 Running the Simulation Locally
+## 💻 Exécution en Local
 
-### Option A: Docker (Recommended)
-Works on Linux, macOS, and Windows (via WSL2). No Gazebo installation needed:
-
+### Option A : Avec Docker (Recommandé)
+Nécessite uniquement Docker installé sur votre machine (Linux, macOS ou Windows avec WSL2) :
 ```bash
-# 1. Allow local X11 display (Linux only, optional for headless)
+# 1. Autoriser l'affichage graphique X11 (sur Linux)
 xhost +local:root
 
-# 2. Build local image and run the practice world
+# 2. Lancer la simulation et le contrôleur
 ./starter_kit/run_docker.sh
 ```
 
-### Option B: Native Installation (Ubuntu 24.04 / 22.04 with Gazebo Jetty)
+### Option B : Installation Native (Ubuntu 22.04 / 24.04 avec Gazebo Jetty)
 ```bash
-# Terminal 1: Launch the 3D practice world
+# Terminal 1 : Lancer le monde d'entraînement
 gz sim -v 3 -r ./worlds/practice_world.sdf
 
-# Terminal 2: Run your Python controller
+# Terminal 2 : Lancer votre contrôleur Python
 python3 ./starter_kit/student_controller.py
 ```
 
 ---
 
-## 📤 Submission & Automated Evaluation
+## 📤 Soumission & Évaluation Automatique
 
-1. Create a dedicated feature branch:
+1. Travaillez sur une branche dédiée :
    ```bash
-   git checkout -b feature/my-cool-strategy
+   git checkout -b feature/mon-super-controleur
    git add starter_kit/student_controller.py
-   git commit -m "feat: improve Ping2 wall following and gate alignment"
-   git push origin feature/my-cool-strategy
+   git commit -m "feat: Amélioration du suivi de quai au Ping2"
+   git push origin feature/mon-super-controleur
    ```
-2. Open a **Pull Request** targeting the `master` branch on GitHub.
-3. The automated evaluation workflow triggers immediately:
-   * It provisions an isolated headless simulation container.
-   * Tests your controller against a secret environmental seed with currents and wavelets.
-   * Posts an evaluation report directly to your PR with your score and unlocked badges.
-   * Submits your validated result to the official **Live Scoreboard**.
+2. Ouvrez une **Pull Request** vers la branche `master` sur GitHub.
+3. Le workflow CI GitHub Actions démarre automatiquement :
+   * Il construit l'environnement dans un conteneur headless sécurisé.
+   * Il teste votre contrôleur face à une graine secrète avec courant marin et perturbations.
+   * Il publie un rapport détaillé en commentaire de votre PR avec votre score et vos badges.
+   * Il transmet votre résultat au **Scoreboard officiel**.
 
-> [!NOTE]
-> **Evaluation Cooldown:**
-> To prevent over-optimizing to specific seeds, a **60-minute cooldown** is enforced between successive evaluation runs on the server.
-
-### 🎥 3D Playback & Run Replay
-Every evaluation run records a full physical trajectory log:
-1. Download the `gz-replay-pr-*.zip` artifact from the GitHub Actions tab of your PR.
-2. Extract the archive and launch the replay viewer:
+### 🎥 Rejouer votre course en 3D
+Chaque évaluation génère un artéfact GitHub contenant l'enregistrement physique complet de votre run :
+1. Téléchargez le fichier `gz-replay-pr-*.zip` depuis l'onglet Actions de votre PR.
+2. Décompressez l'archive et lancez :
    ```bash
    gz sim --playback ./output/replay
    ```
-3. Watch your BlueBoat carve through the waves, observe indicator capsules shift color in real-time, and analyze your navigation profile!
+Vous pourrez observer votre bateau évoluer dans les vagues, voir les capsules changer de couleur et analyser votre trajectoire au millimètre près !\n
