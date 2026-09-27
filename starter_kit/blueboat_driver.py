@@ -36,8 +36,7 @@ except ImportError:
                 from gz.transport import Node
             except ImportError:
                 raise ImportError(
-                    "Gazebo Transport Python bindings not found.
-"
+                    "Gazebo Transport Python bindings not found.\n"
                     "Please install 'python3-gz-transport14' (Gazebo Jetty) or run within the provided Docker container."
                 )
 
@@ -72,51 +71,51 @@ except ImportError:
 
 @dataclass
 class IMUData:
-    """Mesures de la centrale inertielle embarquée (50 Hz)."""
-    yaw: float = 0.0              # Cap du drone en radians (-pi à +pi, 0 = Est / Axe X)
-    yaw_deg: float = 0.0          # Cap en degrés (-180 à +180)
-    yaw_rate: float = 0.0         # Vitesse angulaire de lacet en rad/s (r)
-    roll: float = 0.0             # Roulis en radians (phi)
-    pitch: float = 0.0            # Tangage en radians (theta)
-    linear_accel_x: float = 0.0   # Accélération longitudinale en m/s² (surge)
-    linear_accel_y: float = 0.0   # Accélération transversale en m/s² (sway)
+    """On-board Inertial Measurement Unit readings (50 Hz)."""
+    yaw: float = 0.0              # USV heading in radians (-pi to +pi, 0 = East / X axis)
+    yaw_deg: float = 0.0          # USV heading in degrees (-180 to +180)
+    yaw_rate: float = 0.0         # Yaw angular velocity in rad/s (r)
+    roll: float = 0.0             # Roll angle in radians (phi)
+    pitch: float = 0.0            # Pitch angle in radians (theta)
+    linear_accel_x: float = 0.0   # Longitudinal acceleration in m/s^2 (surge)
+    linear_accel_y: float = 0.0   # Transverse acceleration in m/s^2 (sway)
     timestamp: float = 0.0
 
 
 @dataclass
 class GPSData:
-    """Données du récepteur GNSS/GPS embarqué (5 Hz)."""
+    """On-board GNSS/GPS receiver data (5 Hz)."""
     latitude: float = 0.0
     longitude: float = 0.0
     altitude: float = 0.0
-    x: float = 0.0                # Position X locale cartésienne (mètres, projetée depuis l'origine 48°N, 4.5°W)
-    y: float = 0.0                # Position Y locale cartésienne (mètres)
+    x: float = 0.0                # Local Cartesian X coordinate (meters, projected from origin 48.0 N, -4.5 E)
+    y: float = 0.0                # Local Cartesian Y coordinate (meters)
     is_valid: bool = False
     timestamp: float = 0.0
 
 
 @dataclass
 class Ping2Data:
-    """Données de l'échosondeur monofaisceau Ping2 orienté à 90° bâbord (gauche)."""
-    distance: float = 999.0       # Distance mesurée à l'obstacle bâbord (mètres, 0.5m à 30m)
-    is_valid: bool = False        # Vrai si la mesure est récente (< 0.5s) et dans la portée valide
+    """Ping2 single-beam echosounder data mounted at +90 deg (port / left side)."""
+    distance: float = 999.0       # Distance measured to port obstacle (meters, 0.5m to 30.0m)
+    is_valid: bool = False        # True if reading is recent (< 0.5s) and within valid range
     timestamp: float = 0.0
 
 
 @dataclass
 class BuoyData:
-    """Balise ou marqueur détecté par le capteur sémantique de l'arbitre."""
+    """Buoy or marker detected by the semantic perception sensor."""
     name: str
-    x: float                      # Coordonnée X relative au BlueBoat (mètres devant si > 0)
-    y: float                      # Coordonnée Y relative au BlueBoat (mètres à gauche si > 0, droite si < 0)
-    z: float                      # Coordonnée Z relative (mètres)
-    distance: float               # Distance euclidienne directe (mètres)
-    bearing: float                # Gisement angulaire relatif au cap du bateau (-pi à +pi)
+    x: float                      # Relative X coordinate to BlueBoat (meters forward if > 0)
+    y: float                      # Relative Y coordinate to BlueBoat (meters left if > 0, right if < 0)
+    z: float                      # Relative Z coordinate (meters)
+    distance: float               # Direct Euclidean range (meters)
+    bearing: float                # Relative bearing to vessel heading (-pi to +pi)
 
 
 @dataclass
 class Observation:
-    """État instantané complet perçu par les capteurs du drone."""
+    """Complete instantaneous state perceived by USV sensors."""
     imu: IMUData = field(default_factory=IMUData)
     gps: GPSData = field(default_factory=GPSData)
     ping2: Ping2Data = field(default_factory=Ping2Data)
@@ -126,11 +125,11 @@ class Observation:
 
 class BlueBoatDriver:
     """
-    Pilote de communication matériel / simulateur pour le BlueBoat.
-    Assure les abonnements Gazebo Transport, la conversion des trames Protobuf
-    et le bridage de sécurité physique des propulseurs différentiels.
+    Hardware abstraction and simulation communication driver for the BlueBoat USV.
+    Manages Gazebo Transport subscriptions, Protobuf frame decoding,
+    and physical safety clamping of differential thruster commands.
     """
-    MAX_THRUST = 50.0  # Force maximale par propulseur en Newtons
+    MAX_THRUST = 50.0  # Maximum thrust per motor in Newtons
     MIN_THRUST = -50.0
 
     LAT_ORIGIN = 48.0
@@ -141,28 +140,28 @@ class BlueBoatDriver:
         self._node = Node()
         self._running = True
 
-        # Données capteurs internes
+        # Internal sensor buffers
         self._imu = IMUData()
         self._gps = GPSData()
         self._ping2 = Ping2Data()
         self._buoys: Dict[str, BuoyData] = {}
 
-        # Facteur de conversion longitude selon la latitude d'origine
+        # Longitude conversion factor based on origin latitude
         self._meters_per_lon = self.METERS_PER_LAT * math.cos(math.radians(self.LAT_ORIGIN))
 
-        # Éditeurs de commande moteurs
+        # Thruster command publishers
         self._pub_thrust_left = self._node.advertise("/blueboat/cmd_thrust_left", Double)
         self._pub_thrust_right = self._node.advertise("/blueboat/cmd_thrust_right", Double)
 
-        # Abonnements aux topics Gazebo
+        # Gazebo topic subscriptions
         self._node.subscribe(IMU, "/blueboat/imu", self._on_imu)
         self._node.subscribe(NavSat, "/blueboat/gps", self._on_gps)
         self._node.subscribe(LaserScan, "/blueboat/ping2_port", self._on_ping2)
         self._node.subscribe(Pose_V, "/blueboat/detected_buoys", self._on_buoys)
 
-        print("[BlueBoatDriver] Connecté aux topics Gazebo Transport (/blueboat/*).")
+        print("[BlueBoatDriver] Connected to Gazebo Transport topics (/blueboat/*).")
 
-    # --- Callbacks internes de conversion Protobuf ---
+    # --- Internal Protobuf Callbacks ---
 
     def _on_imu(self, msg: IMU):
         q = msg.orientation
@@ -208,7 +207,7 @@ class BlueBoatDriver:
             if 0.5 <= val <= 30.0:
                 self._ping2 = Ping2Data(distance=val, is_valid=True, timestamp=now)
                 return
-        # Mesure hors portée
+        # Out-of-range measurement
         self._ping2 = Ping2Data(distance=999.0, is_valid=False, timestamp=now)
 
     def _on_buoys(self, msg: Pose_V):
@@ -229,11 +228,11 @@ class BlueBoatDriver:
             )
         self._buoys = new_buoys
 
-    # --- API Utilisateur / Étudiant ---
+    # --- Student / Controller API ---
 
     def get_observation(self) -> Observation:
         """
-        Retourne l'instantané actuel des données capteurs.
+        Returns the latest snapshot of all sensor readings.
         """
         now = time.time()
         ping_valid = self._ping2.is_valid and (now - self._ping2.timestamp < 0.5)
@@ -253,9 +252,9 @@ class BlueBoatDriver:
 
     def set_thrust(self, left_thrust: float, right_thrust: float):
         """
-        Envoie les consignes de poussée différentielle en Newtons.
-        Les valeurs sont strictement bridées entre -50.0 N et +50.0 N.
-        Toute valeur non numérique (NaN / Inf) est automatiquement neutralisée à 0.0.
+        Commands differential thrust in Newtons.
+        Values are strictly clamped between -50.0 N and +50.0 N.
+        Any non-numeric value (NaN / Inf) is automatically neutralized to 0.0.
         """
         if math.isnan(left_thrust) or math.isinf(left_thrust):
             left_thrust = 0.0
@@ -274,30 +273,30 @@ class BlueBoatDriver:
         self._pub_thrust_right.publish(msg_r)
 
     def stop(self):
-        """Coupe immédiatement la poussée des deux moteurs."""
+        """Immediately neutralizes thrust on both motors."""
         self._running = False
         self.set_thrust(0.0, 0.0)
-        print("[BlueBoatDriver] Arrêt d'urgence des propulseurs.")
+        print("[BlueBoatDriver] Emergency motor stop.")
 
     def run(self, step_callback: Callable[[Observation], None], rate_hz: float = 10.0):
         """
-        Exécute la boucle principale de contrôle à la fréquence spécifiée (par défaut 10 Hz).
-        Gère automatiquement les signaux d'arrêt (SIGINT/SIGTERM) et la coupure moteur.
-        
-        :param step_callback: Fonction prenant un objet Observation en argument unique.
-        :param rate_hz: Fréquence de la boucle de contrôle (Hz).
+        Executes the main control loop at the specified frequency (default 10 Hz).
+        Handles termination signals (SIGINT/SIGTERM) and clean shutdown automatically.
+
+        :param step_callback: Function accepting a single Observation argument.
+        :param rate_hz: Control loop update rate in Hz.
         """
         dt = 1.0 / rate_hz
 
         def handle_signal(sig, frame):
-            print("\n[BlueBoatDriver] Signal d'arrêt reçu. Arrêt propre du robot...")
+            print("\n[BlueBoatDriver] Shutdown signal received. Stopping vessel cleanly...")
             self.stop()
             sys.exit(0)
 
         signal.signal(signal.SIGINT, handle_signal)
         signal.signal(signal.SIGTERM, handle_signal)
 
-        print(f"[BlueBoatDriver] Démarrage de la boucle de contrôle ({rate_hz} Hz)...")
+        print(f"[BlueBoatDriver] Starting control loop ({rate_hz} Hz)...")
 
         while self._running:
             t_start = time.time()
@@ -306,7 +305,7 @@ class BlueBoatDriver:
             try:
                 step_callback(obs)
             except Exception as e:
-                print(f"[BlueBoatDriver] Erreur dans le contrôleur étudiant : {e}", file=sys.stderr)
+                print(f"[BlueBoatDriver] Error in student controller: {e}", file=sys.stderr)
 
             elapsed = time.time() - t_start
             sleep_duration = max(0.0, dt - elapsed)
