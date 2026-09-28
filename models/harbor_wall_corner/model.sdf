@@ -1,0 +1,53 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <model name="harbor_wall_corner">
+    <static>true</static>
+    <link name="quay_link">
+      <!-- Arm 1 Collision (Along X) -->
+      <collision name="arm1_collision">
+        <pose>3.7500 -2.2500 -7.1000 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>7.5000 4.5000 18.2000</size>
+          </box>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.9</mu>
+              <mu2>0.9</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+
+      <!-- Arm 2 Collision (Along Y) -->
+      <collision name="arm2_collision">
+        <pose>9.7500 3.7500 -7.1000 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>4.5000 16.5000 18.2000</size>
+          </box>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.9</mu>
+              <mu2>0.9</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+
+      <!-- High-Fidelity Photorealistic Visual Mesh -->
+      <visual name="quay_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>model://harbor_wall_corner/meshes/harbor_wall_corner.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>

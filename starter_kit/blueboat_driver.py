@@ -24,49 +24,84 @@ from typing import Dict, Optional, Callable
 
 # Gazebo Transport binding resolution (Gazebo Jetty -> Harmonic -> Garden)
 try:
-    from gz.transport14 import Node
+    from gz.transport import Node
 except ImportError:
     try:
-        from gz.transport13 import Node
+        from gz.transport15 import Node
     except ImportError:
         try:
-            from gz.transport12 import Node
+            from gz.transport14 import Node
         except ImportError:
             try:
-                from gz.transport import Node
+                from gz.transport13 import Node
             except ImportError:
-                raise ImportError(
-                    "Gazebo Transport Python bindings not found.\n"
-                    "Please install 'python3-gz-transport14' (Gazebo Jetty) or run within the provided Docker container."
-                )
+                try:
+                    from gz.transport12 import Node
+                except ImportError:
+                    raise ImportError(
+                        "\n[BlueBoatDriver] Gazebo Transport Python bindings are not installed on this host.\n"
+                        "Gazebo and its transport library run inside the provided Docker container.\n\n"
+                        "👉 Option A: Run the complete simulation turnkey (Gazebo + Controller in Docker):\n"
+                        "   PowerShell: .\\starter_kit\\run_docker.ps1\n"
+                        "   CMD:        starter_kit\\run_docker.bat\n"
+                        "   Bash:       ./starter_kit/run_docker.sh\n\n"
+                        "👉 Option B: Run Gazebo in Docker and run your controller in a separate terminal:\n"
+                        "   Terminal 1 (Gazebo Server): .\\starter_kit\\run_docker.ps1 -ServerOnly\n"
+                        "   Terminal 2 (Controller):    .\\starter_kit\\run_controller.ps1\n"
+                        "   (Or: docker exec -it ocean-regatta-sim python3 starter_kit/student_controller.py)\n"
+                    )
 
 # Gazebo Protobuf message types resolution (Gazebo Jetty -> Harmonic -> Garden)
 try:
-    from gz.msgs11.double_pb2 import Double
-    from gz.msgs11.imu_pb2 import IMU
-    from gz.msgs11.navsat_pb2 import NavSat
-    from gz.msgs11.laserscan_pb2 import LaserScan
-    from gz.msgs11.pose_v_pb2 import Pose_V
+    from gz.msgs.double_pb2 import Double
+    from gz.msgs.imu_pb2 import IMU
+    from gz.msgs.navsat_pb2 import NavSat
+    from gz.msgs.laserscan_pb2 import LaserScan
+    from gz.msgs.pose_v_pb2 import Pose_V
 except ImportError:
     try:
-        from gz.msgs10.double_pb2 import Double
-        from gz.msgs10.imu_pb2 import IMU
-        from gz.msgs10.navsat_pb2 import NavSat
-        from gz.msgs10.laserscan_pb2 import LaserScan
-        from gz.msgs10.pose_v_pb2 import Pose_V
+        from gz.msgs12.double_pb2 import Double
+        from gz.msgs12.imu_pb2 import IMU
+        from gz.msgs12.navsat_pb2 import NavSat
+        from gz.msgs12.laserscan_pb2 import LaserScan
+        from gz.msgs12.pose_v_pb2 import Pose_V
     except ImportError:
         try:
-            from gz.msgs9.double_pb2 import Double
-            from gz.msgs9.imu_pb2 import IMU
-            from gz.msgs9.navsat_pb2 import NavSat
-            from gz.msgs9.laserscan_pb2 import LaserScan
-            from gz.msgs9.pose_v_pb2 import Pose_V
+            from gz.msgs11.double_pb2 import Double
+            from gz.msgs11.imu_pb2 import IMU
+            from gz.msgs11.navsat_pb2 import NavSat
+            from gz.msgs11.laserscan_pb2 import LaserScan
+            from gz.msgs11.pose_v_pb2 import Pose_V
         except ImportError:
-            from gz.msgs.double_pb2 import Double
-            from gz.msgs.imu_pb2 import IMU
-            from gz.msgs.navsat_pb2 import NavSat
-            from gz.msgs.laserscan_pb2 import LaserScan
-            from gz.msgs.pose_v_pb2 import Pose_V
+            try:
+                from gz.msgs10.double_pb2 import Double
+                from gz.msgs10.imu_pb2 import IMU
+                from gz.msgs10.navsat_pb2 import NavSat
+                from gz.msgs10.laserscan_pb2 import LaserScan
+                from gz.msgs10.pose_v_pb2 import Pose_V
+            except ImportError:
+                try:
+                    from gz.msgs9.double_pb2 import Double
+                    from gz.msgs9.imu_pb2 import IMU
+                    from gz.msgs9.navsat_pb2 import NavSat
+                    from gz.msgs9.laserscan_pb2 import LaserScan
+                    from gz.msgs9.pose_v_pb2 import Pose_V
+                except ImportError:
+                    raise ImportError("Gazebo msgs Protobuf bindings not found.")
+
+# Custom Gazebo Protobuf message types for Semantic Buoy Perception
+try:
+    from buoy_pb2 import BuoyObservationArray, BuoyObservation
+except ImportError:
+    try:
+        import os
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        if script_dir not in sys.path:
+            sys.path.insert(0, script_dir)
+        from buoy_pb2 import BuoyObservationArray, BuoyObservation
+    except ImportError:
+        BuoyObservationArray = None
+        BuoyObservation = None
 
 
 @dataclass
@@ -106,11 +141,32 @@ class Ping2Data:
 class BuoyData:
     """Buoy or marker detected by the semantic perception sensor."""
     name: str
-    x: float                      # Relative X coordinate to BlueBoat (meters forward if > 0)
-    y: float                      # Relative Y coordinate to BlueBoat (meters left if > 0, right if < 0)
-    z: float                      # Relative Z coordinate (meters)
-    distance: float               # Direct Euclidean range (meters)
-    bearing: float                # Relative bearing to vessel heading (-pi to +pi)
+    buoy_type: str = ""           # Semantic type: "red", "green", "cardinal_north", "cardinal_south", "cardinal_east", "cardinal_west"
+    range: float = 0.0            # Measured relative range in meters (with uncertainty)
+    bearing: float = 0.0          # Measured relative bearing in radians (-pi to +pi, >0 port, <0 stbd)
+    bearing_deg: float = 0.0      # Measured relative bearing in degrees (-180 to +180)
+    distance: float = 0.0         # Direct Euclidean range (meters, alias for range)
+    x: float = 0.0                # Relative X coordinate to BlueBoat (meters forward if > 0)
+    y: float = 0.0                # Relative Y coordinate to BlueBoat (meters left if > 0, right if < 0)
+    z: float = 0.0                # Relative Z coordinate (meters)
+    range_true: float = 0.0       # Ground truth range in meters (without noise)
+    bearing_true: float = 0.0     # Ground truth bearing in radians (without noise)
+
+    def __post_init__(self):
+        if self.range == 0.0 and self.distance != 0.0:
+            self.range = self.distance
+        elif self.distance == 0.0 and self.range != 0.0:
+            self.distance = self.range
+        if self.bearing_deg == 0.0 and self.bearing != 0.0:
+            self.bearing_deg = math.degrees(self.bearing)
+        if self.x == 0.0 and self.y == 0.0 and self.range > 0.0:
+            self.x = self.range * math.cos(self.bearing)
+            self.y = self.range * math.sin(self.bearing)
+
+    @property
+    def type(self) -> str:
+        """Convenient alias for buoy_type."""
+        return self.buoy_type
 
 
 @dataclass
@@ -157,9 +213,13 @@ class BlueBoatDriver:
         self._node.subscribe(IMU, "/blueboat/imu", self._on_imu)
         self._node.subscribe(NavSat, "/blueboat/gps", self._on_gps)
         self._node.subscribe(LaserScan, "/blueboat/ping2_port", self._on_ping2)
-        self._node.subscribe(Pose_V, "/blueboat/detected_buoys", self._on_buoys)
 
-        print("[BlueBoatDriver] Connected to Gazebo Transport topics (/blueboat/*).")
+        # Semantic buoy perception subscriptions
+        if BuoyObservationArray is not None:
+            self._node.subscribe(BuoyObservationArray, "/blueboat/buoy_observations", self._on_buoy_observations)
+        self._node.subscribe(Pose_V, "/blueboat/detected_buoys", self._on_buoys_legacy)
+
+        print("[BlueBoatDriver] Connected via Native Gazebo Transport (/blueboat/*).")
 
     # --- Internal Protobuf Callbacks ---
 
@@ -188,11 +248,13 @@ class BlueBoatDriver:
         )
 
     def _on_gps(self, msg: NavSat):
-        x = (msg.latitude - self.LAT_ORIGIN) * self.METERS_PER_LAT
-        y = (msg.longitude - self.LON_ORIGIN) * self._meters_per_lon
+        lat = getattr(msg, "latitude_deg", getattr(msg, "latitude", 0.0))
+        lon = getattr(msg, "longitude_deg", getattr(msg, "longitude", 0.0))
+        x = (lat - self.LAT_ORIGIN) * self.METERS_PER_LAT
+        y = (lon - self.LON_ORIGIN) * self._meters_per_lon
         self._gps = GPSData(
-            latitude=msg.latitude,
-            longitude=msg.longitude,
+            latitude=lat,
+            longitude=lon,
             altitude=msg.altitude,
             x=x,
             y=y,
@@ -204,29 +266,65 @@ class BlueBoatDriver:
         now = time.time()
         if len(msg.ranges) > 0:
             val = float(msg.ranges[0])
-            if 0.5 <= val <= 30.0:
+            if not (math.isinf(val) or math.isnan(val)) and 0.5 <= val <= 30.0:
                 self._ping2 = Ping2Data(distance=val, is_valid=True, timestamp=now)
                 return
         # Out-of-range measurement
         self._ping2 = Ping2Data(distance=999.0, is_valid=False, timestamp=now)
 
-    def _on_buoys(self, msg: Pose_V):
+    def _on_buoy_observations(self, msg: BuoyObservationArray):
         new_buoys = {}
-        for p in msg.pose:
-            bx = p.position.x
-            by = p.position.y
-            bz = p.position.z
-            dist = math.hypot(bx, by)
-            bearing = math.atan2(by, bx)
-            new_buoys[p.name] = BuoyData(
-                name=p.name,
+        for b in msg.buoys:
+            r = float(b.range)
+            brg = float(b.bearing)
+            b_type = str(b.buoy_type or getattr(b, "type", ""))
+            bx = float(getattr(b, "x", r * math.cos(brg)))
+            by = float(getattr(b, "y", r * math.sin(brg)))
+            bz = float(getattr(b, "z", 0.0))
+            brg_deg = float(getattr(b, "bearing_deg", math.degrees(brg)))
+            new_buoys[b.name] = BuoyData(
+                name=b.name,
+                buoy_type=b_type,
+                range=r,
+                bearing=brg,
+                bearing_deg=brg_deg,
+                distance=r,
                 x=bx,
                 y=by,
                 z=bz,
-                distance=dist,
-                bearing=bearing
+                range_true=float(getattr(b, "range_true", r)),
+                bearing_true=float(getattr(b, "bearing_true", brg))
             )
         self._buoys = new_buoys
+
+    def _on_buoys_legacy(self, msg: Pose_V):
+        # Fallback callback if custom message is not active
+        if not self._buoys:
+            new_buoys = {}
+            for p in msg.pose:
+                bx = p.position.x
+                by = p.position.y
+                bz = p.position.z
+                dist = math.hypot(bx, by)
+                bearing = math.atan2(by, bx)
+                name_l = p.name.lower()
+                b_type = "red" if ("port" in name_l or "red" in name_l) else (
+                    "green" if ("starboard" in name_l or "green" in name_l) else (
+                        "cardinal" if "cardinal" in name_l else ""
+                    )
+                )
+                new_buoys[p.name] = BuoyData(
+                    name=p.name,
+                    buoy_type=b_type,
+                    range=dist,
+                    bearing=bearing,
+                    bearing_deg=math.degrees(bearing),
+                    distance=dist,
+                    x=bx,
+                    y=by,
+                    z=bz
+                )
+            self._buoys = new_buoys
 
     # --- Student / Controller API ---
 

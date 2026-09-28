@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 set -e
 
+# Prevent Git Bash / MSYS from translating Linux paths like /workspace to Windows host paths
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# For Git Bash on Windows, convert host paths to native Windows paths for the Docker CLI
+if pwd -W >/dev/null 2>&1; then
+    SCRIPT_DIR="$(cd "${SCRIPT_DIR}" && pwd -W)"
+    REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd -W)"
+fi
 
 echo "=== [1/3] Building local Gazebo Jetty Docker image ==="
 docker build \
@@ -12,31 +22,24 @@ docker build \
 
 echo "=== [2/3] Preparing local replay directory ==="
 mkdir -p "${REPO_ROOT}/local_output/replay"
-chmod -R 777 "${REPO_ROOT}/local_output"
+chmod -R 777 "${REPO_ROOT}/local_output" 2>/dev/null || true
 
 echo "=== [3/3] Executing local simulation sandbox ==="
-docker run --rm -it \
+if [ -t 0 ] && [ -t 1 ]; then
+    DOCKER_FLAGS="-it"
+else
+    DOCKER_FLAGS="-i"
+fi
+
+docker rm -f ocean-regatta-sim >/dev/null 2>&1 || true
+
+docker run --rm ${DOCKER_FLAGS} \
+    --name ocean-regatta-sim \
+    -p 9002:9002 \
+    -p 8080:8080 \
     -v "${REPO_ROOT}:/workspace" \
     -w /workspace \
     ocean-regatta-student-local:2026 \
-    bash -c '
-        export DISPLAY=:99
-        Xvfb :99 -screen 0 1024x768x24 &
-        
-        gz sim -s -r -v 2 \
-            --headless-rendering \
-            worlds/practice_world.sdf \
-            --log-record \
-            --log-record-path /workspace/local_output/replay &
-        GZ_PID=$!
-        
-        sleep 4
-        python3 starter_kit/student_controller.py &
-        STUDENT_PID=$!
-        
-        echo "Simulation running (Press Ctrl+C to stop)..."
-        wait $STUDENT_PID || true
-        kill $GZ_PID 2>/dev/null || true
-    '
+    bash /workspace/starter_kit/entrypoint_sim.sh "$@"
 
 echo "Simulation complete. Replay available: gz sim --playback ./local_output/replay"

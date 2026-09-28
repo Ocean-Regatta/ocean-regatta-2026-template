@@ -77,9 +77,15 @@ jobs:
           git push origin "${TAG_NAME}"
           echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
 
-      - name: Build Evaluator Image
+      - name: Prepare Evaluator Image
         run: |
-          docker build -f Dockerfile.evaluator -t ocean-regatta-evaluator:${{ github.sha }} .
+          if [ -f Dockerfile.evaluator ]; then
+            docker build -f Dockerfile.evaluator -t ocean-regatta-evaluator:${{ github.sha }} .
+          else
+            echo "Using pre-built evaluation image..."
+            docker tag ocean-regatta-evaluator:latest ocean-regatta-evaluator:${{ github.sha }} || \
+            docker tag ocean-regatta-evaluator:2026 ocean-regatta-evaluator:${{ github.sha }} || true
+          fi
 
       - name: Execute Isolated Docker Simulation
         timeout-minutes: 5
@@ -163,18 +169,35 @@ jobs:
 
           gh pr comment ${PR_NUMBER} --body "${PR_COMMENT}"
 
-          # Update static leaderboard and dynamic badges on GitHub Pages
+          # 1. Notify remote scoreboard via webhook if configured
+          if [ -n "${SCOREBOARD_URL}" ]; then
+            echo "Sending evaluation result to scoreboard at ${SCOREBOARD_URL}..."
+            curl -s -X POST "${SCOREBOARD_URL}" \
+              -H "Authorization: Bearer ${SCOREBOARD_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d @"${RESULT_FILE}" || echo "::warning::Scoreboard webhook dispatch skipped or failed"
+          fi
+
+          # 2. Update static leaderboard and dynamic badges if configured
           LEADERBOARD_FILE="${{ github.workspace }}/portal_scoreboard/docs/data/leaderboard.json"
           if [ ! -f "${LEADERBOARD_FILE}" ]; then
             LEADERBOARD_FILE="${{ github.workspace }}/docs/data/leaderboard.json"
           fi
 
-          UPDATER="${{ github.workspace }}/scripts/update_leaderboard.py"
-          if [ ! -f "${UPDATER}" ]; then
+          UPDATER=""
+          if [ -f "${{ github.workspace }}/portal_scoreboard/scripts/update_leaderboard.py" ]; then
             UPDATER="${{ github.workspace }}/portal_scoreboard/scripts/update_leaderboard.py"
+          elif [ -f "/opt/ocean-regatta/scripts/update_leaderboard.py" ]; then
+            UPDATER="/opt/ocean-regatta/scripts/update_leaderboard.py"
+          else
+            # Extract trusted updater from evaluator docker container
+            docker run --rm ocean-regatta-evaluator:${{ github.sha }} cat /challenge/scripts/update_leaderboard.py > /tmp/update_leaderboard.py 2>/dev/null || true
+            if [ -s /tmp/update_leaderboard.py ]; then
+              UPDATER="/tmp/update_leaderboard.py"
+            fi
           fi
 
-          if [ -f "${UPDATER}" ] && [ -f "${RESULT_FILE}" ]; then
+          if [ -n "${UPDATER}" ] && [ -f "${UPDATER}" ] && [ -f "${LEADERBOARD_FILE}" ] && [ -f "${RESULT_FILE}" ]; then
             python3 "${UPDATER}" \
               --result "${RESULT_FILE}" \
               --leaderboard "${LEADERBOARD_FILE}" \

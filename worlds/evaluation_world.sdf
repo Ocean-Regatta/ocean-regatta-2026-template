@@ -1,0 +1,393 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <world name="practice_world">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.002</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <scene>
+      <grid>false</grid>
+    </scene>
+
+    <!-- Simulation Plugins -->
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-contact-system" name="gz::sim::systems::Contact"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+    <plugin filename="gz-sim-navsat-system" name="gz::sim::systems::NavSat"/>
+
+    <!-- Ocean Regatta Waypoint Scoring System -->
+    <plugin
+        filename="libscoring_system.so"
+        name="regatta::ScoringSystem">
+      <world_name>practice_world</world_name>
+      <robot_name>blueboat</robot_name>
+      <robot_link>base_link</robot_link>
+      <activation_radius>1.5</activation_radius>
+      <validation_radius>0.3</validation_radius>
+      <cardinal_radius>20.0</cardinal_radius>
+      <cardinal_penalty>2.0</cardinal_penalty>
+      <max_points_per_waypoint>2.0</max_points_per_waypoint>
+      <timeout>1800.0</timeout>
+      <output_file>scoring_result.json</output_file>
+      <!-- Set exit_on_finish to true to close GUI windows and completely exit Gazebo when finished/timed out -->
+      <exit_on_finish>false</exit_on_finish>
+    </plugin>
+
+    <!-- GUI Configuration & Live Scoring Widget -->
+    <gui fullscreen="0">
+      <plugin filename="MinimalScene" name="3D View">
+        <gz-gui>
+          <title>3D View</title>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="string" key="state">docked</property>
+        </gz-gui>
+        <engine>ogre2</engine>
+        <scene>scene</scene>
+        <ambient_light>0.4 0.4 0.4</ambient_light>
+        <background_color>0.8 0.8 0.8</background_color>
+        <camera_pose>-6 0 6 0 0.5 0</camera_pose>
+      </plugin>
+      <plugin filename="GzSceneManager" name="Scene Manager">
+        <gz-gui>
+          <property key="resizable" type="bool">false</property>
+          <property key="width" type="double">5</property>
+          <property key="height" type="double">5</property>
+          <property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property>
+        </gz-gui>
+      </plugin>
+      <plugin filename="WorldControl" name="World control">
+        <gz-gui>
+          <title>World control</title>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="height">72</property>
+          <property type="double" key="width">121</property>
+          <property type="double" key="z">1</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View">
+            <line own="left" target="left"/>
+            <line own="bottom" target="bottom"/>
+          </anchors>
+        </gz-gui>
+        <play_pause>true</play_pause>
+        <step>true</step>
+        <start_paused>false</start_paused>
+      </plugin>
+      <plugin filename="WorldStats" name="World stats">
+        <gz-gui>
+          <title>World stats</title>
+          <property type="bool" key="showTitleBar">false</property>
+          <property type="bool" key="resizable">false</property>
+          <property type="double" key="height">72</property>
+          <property type="double" key="width">290</property>
+          <property type="double" key="z">1</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View">
+            <line own="right" target="right"/>
+            <line own="bottom" target="bottom"/>
+          </anchors>
+        </gz-gui>
+        <sim_time>true</sim_time>
+        <real_time>true</real_time>
+        <real_time_factor>true</real_time_factor>
+        <iterations>true</iterations>
+      </plugin>
+      <plugin filename="ScoringWidget" name="regatta::ScoringWidget">
+        <gz-gui>
+          <title>Regatta Scoring</title>
+          <property type="string" key="state">docked</property>
+        </gz-gui>
+      </plugin>
+    </gui>
+
+    <plugin filename="gz-sim-buoyancy-system" name="gz::sim::systems::Buoyancy">
+      <graded_buoyancy>
+        <default_density>1000.0</default_density>
+        <density_change>
+          <above_depth>0</above_depth>
+          <density>1.2</density>
+        </density_change>
+      </graded_buoyancy>
+      <enable>blueboat</enable>
+    </plugin>
+
+    <!-- Ocean Wave and Stream Simulation Plugin -->
+    <plugin filename="libwave_simulation_system.so" name="regatta::WaveSimulationSystem">
+      <!-- Ocean stream: intensity (current speed in m/s) and direction (degrees: 0 = East/+X, 90 = North/+Y) -->
+      <stream_intensity>0.05</stream_intensity>
+      <stream_direction_deg>45.0</stream_direction_deg>
+
+      <!-- Multi-component Gerstner wave field strictly synchronized with visual shader -->
+      <waves>
+        <wave>
+          <amplitude>0.14</amplitude>
+          <period>4.0</period>
+          <direction_deg>30.0</direction_deg>
+          <steepness>0.5</steepness>
+        </wave>
+        <wave>
+          <amplitude>0.06</amplitude>
+          <period>2.5</period>
+          <direction_deg>60.0</direction_deg>
+          <steepness>0.4</steepness>
+        </wave>
+        <wave>
+          <amplitude>0.03</amplitude>
+          <period>1.5</period>
+          <direction_deg>15.0</direction_deg>
+          <steepness>0.2</steepness>
+        </wave>
+      </waves>
+
+      <!-- Target robot and link for hydrodynamic stream & wave forces -->
+      <robot_name>blueboat</robot_name>
+      <robot_link>base_link</robot_link>
+
+      <!-- Vessel wave excitation and damping parameters -->
+      <wave_heave_stiffness>1200.0</wave_heave_stiffness>
+      <wave_heave_damping>600.0</wave_heave_damping>
+      <wave_roll_stiffness>100.0</wave_roll_stiffness>
+      <wave_roll_damping>80.0</wave_roll_damping>
+      <wave_pitch_stiffness>90.0</wave_pitch_stiffness>
+      <wave_pitch_damping>70.0</wave_pitch_damping>
+
+      <!-- Buoy oscillation response (movement relative to z, phi, theta) -->
+      <buoy_heave_amplitude_scale>1.0</buoy_heave_amplitude_scale>
+      <buoy_tilt_scale>0.8</buoy_tilt_scale>
+    </plugin>
+
+    <!-- Semantic Buoy Perception Sensor System -->
+    <plugin
+        filename="libsemantic_buoy_sensor_system.so"
+        name="regatta::SemanticBuoySensorSystem">
+      <robot_name>blueboat</robot_name>
+      <robot_link>base_link</robot_link>
+      <topic>/blueboat/buoy_observations</topic>
+      <legacy_topic>/blueboat/detected_buoys</legacy_topic>
+      <publish_legacy_pose_v>true</publish_legacy_pose_v>
+
+      <!-- 1 Hz update rate (once per second) -->
+      <update_rate>1.0</update_rate>
+
+      <!-- Tunable observation cone in front of robot (+/- 55 deg = 110 deg total FOV) -->
+      <fov_deg>110.0</fov_deg>
+      <min_range>0.5</min_range>
+      <max_range>35.0</max_range>
+
+      <!-- Tunable measurement uncertainty (+/- 3 deg, +/- 0.5 m) -->
+      <enable_noise>true</enable_noise>
+      <noise_type>gaussian</noise_type>
+      <range_noise_stddev>0.25</range_noise_stddev>
+      <bearing_noise_deg_stddev>1.5</bearing_noise_deg_stddev>
+      <range_noise_max>0.5</range_noise_max>
+      <bearing_noise_max_deg>3.0</bearing_noise_max_deg>
+    </plugin>
+
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>48.0</latitude_deg>
+      <longitude_deg>-4.5</longitude_deg>
+      <elevation>0.0</elevation>
+      <heading_deg>0.0</heading_deg>
+    </spherical_coordinates>
+
+    <!-- Lighting & Water -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 50 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+      <direction>-0.5 0.2 -1.0</direction>
+    </light>
+
+    <!-- Animated Ocean Waves (Native Gazebo Sim ShaderParam Gerstner waves) -->
+    <include>
+      <uri>model://waves</uri>
+      <name>waves</name>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+
+    <!-- Procedural Seafloor (Sand and Rocks) -->
+    <include>
+      <uri>model://seafloor</uri>
+      <name>seafloor</name>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+
+    <!-- BlueBoat USV Model -->
+    <include>
+      <uri>model://blueboat</uri>
+      <name>blueboat</name>
+      <pose>-5 -5 0.05 0 0 -1.2</pose>
+    </include>
+
+    <!-- Scene -->
+    <!-- First Gate -->
+    <include>
+      <uri>model://red_cylinder_buoy</uri>
+      <name>gate_port_1</name>
+      <pose>-1.5 15 0.4 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://waypoint</uri>
+      <name>waypoint_1</name>
+      <pose>0 15 0.0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://green_cone_buoy</uri>
+      <name>gate_starboard_1</name>
+      <pose>1.5 15 0.4 0 0 0</pose>d
+    </include>
+
+    <!-- Second Gate -->
+    <include>
+      <uri>model://red_cylinder_buoy</uri>
+      <name>gate_port_2</name>
+      <pose>20 21.5 0.4 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://waypoint</uri>
+      <name>waypoint_2</name>
+      <pose>20 20 0.0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://green_cone_buoy</uri>
+      <name>gate_starboard_2</name>
+      <pose>20 18.5 0.4 0 0 0</pose>
+    </include>
+    
+    <!-- Cardinal Marks -->
+    <include>
+      <uri>model://cardinal_south</uri>
+      <name>cardinal_south</name>
+      <pose>40 18 0.6 0 0 0</pose>
+    </include>
+
+    <!-- Thrid Gate -->
+    <include>
+      <uri>model://red_cylinder_buoy</uri>
+      <name>gate_port_3</name>
+      <pose>60 21.5 0.4 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://waypoint</uri>
+      <name>waypoint_3</name>
+      <pose>60 20 0.0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://green_cone_buoy</uri>
+      <name>gate_starboard_3</name>
+      <pose>60 18.5 0.4 0 0 0</pose>
+    </include>
+
+    <!-- Harbor walls -->
+    <include>
+      <uri>model://outer_breakwater</uri>
+      <name>outer_breakwater</name>
+      <pose>80 40 0 0 0 -1.5707</pose>
+    </include>
+
+    <include>
+      <uri>model://outer_breakwater_2</uri>
+      <name>outer_breakwater_2</name>
+      <pose>120 -95 0 0 0 3.14159</pose>
+    </include>
+
+    <!-- Wall waypoints -->
+    <include>
+      <uri>model://waypoint</uri>
+      <name>waypoint_7</name>
+      <pose>70 0 0.0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://waypoint</uri>
+      <name>waypoint_8</name>
+      <pose>70 -20 0.0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://waypoint</uri>
+      <name>waypoint_9</name>
+      <pose>70 -40 0.0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://waypoint</uri>
+      <name>waypoint_10</name>
+      <pose>70 -60 0.0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://waypoint</uri>
+      <name>waypoint_11</name>
+      <pose>70 -80 0.0 0 0 0</pose>
+    </include>
+
+    <!-- Fourth Gate -->
+    <include>
+      <uri>model://red_cylinder_buoy</uri>
+      <name>gate_port_4</name>
+      <pose>60 -82 0.4 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://waypoint</uri>
+      <name>waypoint_4</name>
+      <pose>60 -85 0.0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://green_cone_buoy</uri>
+      <name>gate_starboard_4</name>
+      <pose>60 -88 0.4 0 0 0</pose>
+    </include>
+
+    <!-- Fifth Gate -->
+    <include>
+      <uri>model://red_cylinder_buoy</uri>
+      <name>gate_port_5</name>
+      <pose>40 -82 0.4 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://waypoint</uri>
+      <name>waypoint_5</name>
+      <pose>40 -85 0.0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://green_cone_buoy</uri>
+      <name>gate_starboard_5</name>
+      <pose>40 -88 0.4 0 0 0</pose>
+    </include>
+
+    <!-- Last Waypoint -->
+    <include>
+      <uri>model://waypoint</uri>
+      <name>waypoint_6</name>
+      <pose>90 -85 0.0 0 0 0</pose>
+    </include>
+
+    <!-- Finish Line -->
+    <include>
+      <uri>model://finish_line</uri>
+      <name>finish_line</name>
+      <pose>110 -85.0 0 0 0 0</pose>
+    </include>
+  </world>
+</sdf>

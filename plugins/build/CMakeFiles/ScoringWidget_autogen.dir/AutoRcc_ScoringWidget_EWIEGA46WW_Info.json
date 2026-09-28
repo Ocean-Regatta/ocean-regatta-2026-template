@@ -1,0 +1,25 @@
+{
+	"BUILD_DIR" : "/workspace/plugins/build/ScoringWidget_autogen",
+	"CMAKE_BINARY_DIR" : "/workspace/plugins/build",
+	"CMAKE_CURRENT_BINARY_DIR" : "/workspace/plugins/build",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/workspace/plugins",
+	"CMAKE_SOURCE_DIR" : "/workspace/plugins",
+	"GENERATOR" : "Unix Makefiles",
+	"INCLUDE_DIR" : "/workspace/plugins/build/ScoringWidget_autogen/include",
+	"INPUTS" : 
+	[
+		"/workspace/plugins/ScoringWidget.qml",
+		"/workspace/plugins/ScoringWidget.qml",
+		"/workspace/plugins/ScoringWidget.qml"
+	],
+	"LOCK_FILE" : "/workspace/plugins/build/CMakeFiles/ScoringWidget_autogen.dir/AutoRcc_ScoringWidget_EWIEGA46WW_Lock.lock",
+	"MULTI_CONFIG" : false,
+	"OPTIONS" : [ "-name", "ScoringWidget" ],
+	"OUTPUT_CHECKSUM" : "EWIEGA46WW",
+	"OUTPUT_NAME" : "qrc_ScoringWidget.cpp",
+	"RCC_EXECUTABLE" : "/usr/lib/qt6/libexec/rcc",
+	"RCC_LIST_OPTIONS" : [ "--list" ],
+	"SETTINGS_FILE" : "/workspace/plugins/build/CMakeFiles/ScoringWidget_autogen.dir/AutoRcc_ScoringWidget_EWIEGA46WW_Used.txt",
+	"SOURCE" : "/workspace/plugins/ScoringWidget.qrc",
+	"VERBOSITY" : 0
+}

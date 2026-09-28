@@ -20,13 +20,15 @@ RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyri
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gz-jetty \
-    python3-gz-transport14 \
-    python3-gz-msgs11 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
 ENV GZ_SIM_RESOURCE_PATH=/workspace/models:/workspace/worlds
+ENV GZ_SIM_SYSTEM_PLUGIN_PATH=/workspace/plugins/build:/workspace/build
+ENV GZ_GUI_PLUGIN_PATH=/workspace/plugins/build:/workspace/build
 ENV PYTHONUNBUFFERED=1
+
+EXPOSE 9002 8080
 
 CMD ["bash"]

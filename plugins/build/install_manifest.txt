@@ -1,0 +1,3 @@
+/usr/lib/x86_64-linux-gnu/gz-sim-10/plugins/libwave_simulation_system.so
+/usr/lib/x86_64-linux-gnu/gz-sim-10/plugins/libscoring_system.so
+/usr/lib/x86_64-linux-gnu/gz-sim-10/plugins/libscoring_widget.so

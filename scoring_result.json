@@ -1,0 +1,244 @@
+{
+  "score": 5.887,
+  "total_score": 5.887,
+  "waypoint_score": 5.887,
+  "total_penalties": 0.000,
+  "penalties": 0.000,
+  "penalty_count": 0,
+  "cardinal_penalty_rate": 2.000,
+  "cardinal_radius": 20.000,
+  "max_score": 22.000,
+  "sim_time": 426.052,
+  "total_time": 426.050,
+  "total_run_time": 426.050,
+  "run_time": 426.050,
+  "start_time": 0.002,
+  "finish_time": 426.052,
+  "timeout": 1800.000,
+  "reason": "FINISH_LINE_CROSSED",
+  "success": true,
+  "finish_line_crossed": true,
+  "heading": 0.037,
+  "heading_deg": 2.129,
+  "heading_rad": 0.037,
+  "robot_heading": 0.037,
+  "robot_heading_deg": 2.129,
+  "robot_heading_rad": 0.037,
+  "finish_heading": 0.037,
+  "finish_heading_deg": 2.129,
+  "finish_heading_rad": 0.037,
+  "relative_heading_deg": 2.129,
+  "relative_heading_rad": 0.037,
+  "finished_backwards": false,
+  "finish_line_count": 1,
+  "finish_line": {
+    "name": "finish_line",
+    "crossed": true,
+    "crossing_time": 426.052,
+    "heading": 0.037,
+    "heading_deg": 2.129,
+    "heading_rad": 0.037,
+    "robot_heading_deg": 2.129,
+    "robot_heading_rad": 0.037,
+    "finish_line_yaw_deg": 0.000,
+    "relative_heading_deg": 2.129,
+    "relative_heading_rad": 0.037,
+    "finished_backwards": false,
+    "position": {"x": 109.502, "y": -83.575, "z": -0.442}
+  },
+  "all_waypoints_done": false,
+  "waypoints_cleared": 3,
+  "total_waypoints": 11,
+  "waypoints": [
+    {
+      "name": "waypoint_1",
+      "score": 2.000,
+      "max_score": 2.000,
+      "validated": true,
+      "validation_time": 59.734000,
+      "min_distance": 0.171,
+      "position": {"x": 0.000, "y": 15.000, "z": 0.000}
+    },
+    {
+      "name": "waypoint_2",
+      "score": 1.887,
+      "max_score": 2.000,
+      "validated": true,
+      "validation_time": 106.536000,
+      "min_distance": 0.368,
+      "position": {"x": 20.000, "y": 20.000, "z": 0.000}
+    },
+    {
+      "name": "waypoint_3",
+      "score": 2.000,
+      "max_score": 2.000,
+      "validated": true,
+      "validation_time": 268.156000,
+      "min_distance": 0.220,
+      "position": {"x": 60.000, "y": 20.000, "z": 0.000}
+    },
+    {
+      "name": "waypoint_7",
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 3.969,
+      "position": {"x": 70.000, "y": 0.000, "z": 0.000}
+    },
+    {
+      "name": "waypoint_8",
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 7.109,
+      "position": {"x": 70.000, "y": -20.000, "z": 0.000}
+    },
+    {
+      "name": "waypoint_9",
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 6.297,
+      "position": {"x": 70.000, "y": -40.000, "z": 0.000}
+    },
+    {
+      "name": "waypoint_10",
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 5.212,
+      "position": {"x": 70.000, "y": -60.000, "z": 0.000}
+    },
+    {
+      "name": "waypoint_11",
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 2.321,
+      "position": {"x": 70.000, "y": -80.000, "z": 0.000}
+    },
+    {
+      "name": "waypoint_4",
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 11.309,
+      "position": {"x": 60.000, "y": -85.000, "z": 0.000}
+    },
+    {
+      "name": "waypoint_5",
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 25.675,
+      "position": {"x": 40.000, "y": -85.000, "z": 0.000}
+    },
+    {
+      "name": "waypoint_6",
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 3.249,
+      "position": {"x": 90.000, "y": -85.000, "z": 0.000}
+    }
+  ],
+  "waypoint_details": {
+    "waypoint_1": {
+      "score": 2.000,
+      "max_score": 2.000,
+      "validated": true,
+      "validation_time": 59.734000,
+      "min_distance": 0.171
+    },
+    "waypoint_2": {
+      "score": 1.887,
+      "max_score": 2.000,
+      "validated": true,
+      "validation_time": 106.536000,
+      "min_distance": 0.368
+    },
+    "waypoint_3": {
+      "score": 2.000,
+      "max_score": 2.000,
+      "validated": true,
+      "validation_time": 268.156000,
+      "min_distance": 0.220
+    },
+    "waypoint_7": {
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 3.969
+    },
+    "waypoint_8": {
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 7.109
+    },
+    "waypoint_9": {
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 6.297
+    },
+    "waypoint_10": {
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 5.212
+    },
+    "waypoint_11": {
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 2.321
+    },
+    "waypoint_4": {
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 11.309
+    },
+    "waypoint_5": {
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 25.675
+    },
+    "waypoint_6": {
+      "score": 0.000,
+      "max_score": 2.000,
+      "validated": false,
+      "validation_time": null,
+      "min_distance": 3.249
+    }
+  },
+  "cardinal_buoys": [
+    {
+      "name": "cardinal_south",
+      "type": "cardinal_south",
+      "overpassed": true,
+      "overpass_side": "correct",
+      "penalty_applied": false,
+      "penalty_points": 0.000,
+      "overpass_time": 136.546000,
+      "min_distance": 1.318
+    }
+  ]
+}

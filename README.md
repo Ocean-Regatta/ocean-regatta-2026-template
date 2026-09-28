@@ -31,11 +31,12 @@ participant_template/
 ├── starter_kit/
 │   ├── student_controller.py    # ✏️ YOUR CODE GOES HERE (only file evaluated on server)
 │   ├── blueboat_driver.py       # Hardware abstraction layer (HAL) for sensors and thrusters
-│   ├── run_docker.sh            # Turnkey Docker launcher for local development & replays
+│   ├── run_docker.ps1           # Turnkey Docker launcher for Windows PowerShell
+│   ├── run_docker.bat           # Turnkey Docker launcher for Windows Command Prompt
+│   ├── run_docker.sh            # Turnkey Docker launcher for Linux, macOS & Git Bash
 │   ├── run_local.sh             # Native launcher (if Gazebo Jetty is installed locally)
+│   ├── entrypoint_sim.sh        # Headless Gazebo & controller runner inside Docker
 │   └── Dockerfile.local         # Development Docker container
-├── scripts/
-│   └── update_leaderboard.py    # Leaderboard & badge management script
 └── .github/
     └── workflows/
         └── evaluate.yml         # Automated GitHub Actions evaluation workflow
@@ -62,21 +63,30 @@ The simulator features an authentic **Blue Robotics BlueBoat** catamaran represe
 
 At each step of the **$10\text{ Hz}$** control loop, your controller receives an `obs: Observation` dataclass from the `BlueBoatDriver`.
 
-### 1. Forward Optical Perception (`obs.buoys`)
-Simulates an on-board computer vision detector tracking buoys within visual range:
-* **Field of View (FOV):** $\pm 55^\circ$ forward cone, up to $35.0\text{ m}$ range.
-* **Coordinates provided:**
-  * `buoy.distance`: Direct Euclidean range in meters.
-  * `buoy.bearing`: Relative angle to boat heading in radians ($>0$ port / $<0$ starboard).
-  * `buoy.x`: Relative distance ahead along vehicle surge axis (meters).
-  * `buoy.y`: Relative lateral offset along vehicle sway axis (meters, $>0$ port / $<0$ starboard).
-* **Classification tags:**
-  * `buoy.name`: Unique identifier (e.g., `"gate_port_1"`, `"gate_starboard_1"`, `"cardinal_north"`, `"gate_pier_entry_port"`, `"gate_pier_exit_port"`).
+### 1. Forward Semantic Perception Sensor (`obs.buoys`)
+Simulates an on-board computer vision / semantic perception detector tracking buoys within an observation cone in front of the vehicle:
+* **Update Rate:** $1\text{ Hz}$ (publishes once per second via native Gazebo Transport on `/blueboat/buoy_observations`).
+* **Observation Cone (Tunable FOV):** Tunable forward cone (default $\pm 55^\circ$, $110^\circ$ total horizontal FOV, up to $35.0\text{ m}$ range).
+* **Tunable Uncertainty:** Measurements include realistic sensor noise (e.g., Gaussian $\pm 0.5\text{ m}$ range uncertainty and $\pm 3^\circ$ bearing uncertainty).
+* **Buoy Information Provided (`BuoyData`):**
+  * `buoy.name`: Unique identifier (e.g., `"gate_port_1"`, `"gate_starboard_1"`, `"cardinal_north"`, `"gate_pier_entry_port"`).
+  * `buoy.buoy_type` (or `buoy.type`): Semantic category string (`"red"` for port/cylinder buoys, `"green"` for starboard/cone buoys, `"cardinal_north"`, `"cardinal_south"`, `"cardinal_east"`, `"cardinal_west"`).
+  * `buoy.range` (or `buoy.distance`): Direct Euclidean range in meters (with uncertainty).
+  * `buoy.bearing`: Relative horizontal bearing to boat heading in radians ($-\pi$ to $+\pi$, $>0$ port / $<0$ starboard).
+  * `buoy.bearing_deg`: Relative bearing in degrees ($-180^\circ$ to $+180^\circ$).
+  * `buoy.x`: Forward body-frame relative coordinate (surge axis, meters).
+  * `buoy.y`: Lateral body-frame relative coordinate (sway axis, meters, $>0$ port / $<0$ starboard).
 
-#### Polar to Body-Frame Conversion
+#### Usage Example in Controller
 ```python
-x_body = buoy.distance * math.cos(buoy.bearing)
-y_body = buoy.distance * math.sin(buoy.bearing)
+for name, buoy in obs.buoys.items():
+    print(f"[{buoy.name}] Type: {buoy.buoy_type} | Range: {buoy.range:.2f}m | Bearing: {buoy.bearing_deg:.1f}°")
+    if buoy.buoy_type == "red":
+        # Pass to the starboard side of port mark
+        ...
+    elif buoy.buoy_type == "cardinal_north":
+        # Round on the northern side
+        ...
 ```
 
 ### 2. Ping2 Acoustic Echosounder (`obs.ping2`)
@@ -105,27 +115,82 @@ Each channel gate and pier alignment checkpoint features a semi-transparent 2.0-
 
 ---
 
+## 🌊 Ocean Waves & Streams Simulation
+
+The simulation features a dynamic ocean environment plugin (`libwave_simulation_system.so`) configurable directly within the world SDF (`worlds/practice_world.sdf`):
+
+```xml
+<plugin filename="libwave_simulation_system.so" name="regatta::WaveSimulationSystem">
+  <!-- Ocean Stream / Current -->
+  <stream_intensity>0.5</stream_intensity>        <!-- Flow speed in m/s -->
+  <stream_direction_deg>45.0</stream_direction_deg> <!-- Direction: 0° = East (+X), 90° = North (+Y) -->
+
+  <!-- Ocean Waves -->
+  <wave_amplitude>0.15</wave_amplitude>           <!-- Wave amplitude in meters (crest height) -->
+  <wave_period>4.0</wave_period>                  <!-- Wave period in seconds -->
+  <wave_direction_deg>30.0</wave_direction_deg>   <!-- Propagation direction in degrees -->
+  <wave_steepness>0.8</wave_steepness>            <!-- Gerstner steepness [0.0 = sine wave, 1.0 = sharp crest] -->
+
+  <!-- Vessel & Buoys Interaction -->
+  <robot_name>blueboat</robot_name>
+  <robot_link>base_link</robot_link>
+  <buoy_heave_amplitude_scale>1.0</buoy_heave_amplitude_scale> <!-- Buoy heave response (z) -->
+  <buoy_tilt_scale>1.0</buoy_tilt_scale>                       <!-- Buoy pitch & roll response (theta, phi) -->
+  <buoy_mooring_compliance>0.08</buoy_mooring_compliance>       <!-- Mooring compliance in waves -->
+</plugin>
+```
+
+### Physical Dynamics & Buoy Motion
+* **Stream Forces on BlueBoat:** Exerts realistic hydrodynamic drag on the hull according to stream velocity and direction, displacing the vessel downstream and requiring heading correction.
+* **Wave Perturbations:** Induces dynamic heave forces and pitch/roll excitation moments onto the catamaran hulls as wave crests and troughs traverse the vessel.
+* **Buoy Oscillation & Buoyancy:** All channel gate and cardinal buoys dynamically track the local wave elevation and slopes, oscillating in heave ($z$), roll ($\phi$), and pitch ($\theta$) while remaining moored at their geographic waypoint positions.
+
+---
+
+
 ## 💻 Running the Simulation Locally
 
-### Option A: Docker (Recommended)
-Works on Linux, macOS, and Windows (via WSL2). No Gazebo installation needed:
+### Option A: Docker (Recommended — with Native WebSocket 3D WebViewer)
+Works seamlessly on Windows, Linux, and macOS without requiring a local Gazebo or ROS installation.
+**No X11 / X server export required**—the 3D simulation scene streams directly to your browser via WebSockets!
 
-```bash
-# 1. Allow local X11 display (Linux only, optional for headless)
-xhost +local:root
+#### Mode 1: Complete Turnkey Simulation (Recommended)
+Docker runs both Gazebo and `student_controller.py` in the container. Any code changes made in `starter_kit/student_controller.py` take effect immediately on each launch because your folder is mounted live into the container:
+* **Windows (PowerShell):** `.\starter_kit\run_docker.ps1`
+* **Windows (Command Prompt):** `starter_kit\run_docker.bat`
+* **Linux / macOS / WSL:** `./starter_kit/run_docker.sh`
 
-# 2. Build local image and run the practice world
-./starter_kit/run_docker.sh
-```
+#### Mode 2: Interactive Controller Iteration (Two Terminals)
+Keep Gazebo running in the background and start/stop/restart your Python controller in a separate terminal:
+1. **Terminal 1: Start Gazebo Simulation Server**
+   * **Windows (PowerShell):** `.\starter_kit\run_docker.ps1 -ServerOnly`
+   * **Windows (Command Prompt):** `starter_kit\run_docker.bat --server-only`
+   * **Linux / macOS / WSL:** `./starter_kit/run_docker.sh --server-only`
+2. **Terminal 2: Run and debug your controller interactively**
+   * **Windows (PowerShell):** `.\starter_kit\run_controller.ps1`
+   * **Windows (Command Prompt):** `starter_kit\run_controller.bat`
+   * **Linux / macOS / WSL:** `./starter_kit/run_controller.sh`
+   *(Or manually: `docker exec -it ocean-regatta-sim python3 starter_kit/student_controller.py`)*
+
+#### 🌐 Viewing the 3D Simulation in your Browser:
+While the simulation runs inside Docker:
+* **Option 1 (Local WebViewer):** Open [http://localhost:8080](http://localhost:8080) in your web browser.
+* **Option 2 (Official Hosted Viewer):** Visit [https://app.gazebosim.org/visualization](https://app.gazebosim.org/visualization) and connect to `ws://localhost:9002`.
+
+---
 
 ### Option B: Native Installation (Ubuntu 24.04 / 22.04 with Gazebo Jetty)
-```bash
-# Terminal 1: Launch the 3D practice world
-gz sim -v 3 -r ./worlds/practice_world.sdf
 
-# Terminal 2: Run your Python controller
-python3 ./starter_kit/student_controller.py
+You can launch Gazebo either with its native Qt GUI window or in headless mode with WebSocket:
+
+```bash
+# Mode 1: Native 3D GUI Window (default)
+./starter_kit/run_local.sh --gui
+
+# Mode 2: Headless Gazebo Server with WebSocket (view in browser at http://localhost:8080)
+./starter_kit/run_local.sh --web
 ```
+
 
 ---
 
