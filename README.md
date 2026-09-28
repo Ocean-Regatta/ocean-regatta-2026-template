@@ -31,11 +31,12 @@ participant_template/
 ├── starter_kit/
 │   ├── student_controller.py    # ✏️ YOUR CODE GOES HERE (only file evaluated on server)
 │   ├── blueboat_driver.py       # Hardware abstraction layer (HAL) for sensors and thrusters
-│   ├── run_docker.sh            # Turnkey Docker launcher for local development & replays
+│   ├── run_docker.ps1           # Turnkey Docker launcher for Windows PowerShell
+│   ├── run_docker.bat           # Turnkey Docker launcher for Windows Command Prompt
+│   ├── run_docker.sh            # Turnkey Docker launcher for Linux, macOS & Git Bash
 │   ├── run_local.sh             # Native launcher (if Gazebo Jetty is installed locally)
+│   ├── entrypoint_sim.sh        # Headless Gazebo & controller runner inside Docker
 │   └── Dockerfile.local         # Development Docker container
-├── scripts/
-│   └── update_leaderboard.py    # Leaderboard & badge management script
 └── .github/
     └── workflows/
         └── evaluate.yml         # Automated GitHub Actions evaluation workflow
@@ -107,25 +108,47 @@ Each channel gate and pier alignment checkpoint features a semi-transparent 2.0-
 
 ## 💻 Running the Simulation Locally
 
-### Option A: Docker (Recommended)
-Works on Linux, macOS, and Windows (via WSL2). No Gazebo installation needed:
+### Option A: Docker (Recommended — with Native WebSocket 3D WebViewer)
+Works seamlessly on Windows, Linux, and macOS without requiring a local Gazebo or ROS installation.
+**No X11 / X server export required**—the 3D simulation scene streams directly to your browser via WebSockets!
 
-```bash
-# 1. Allow local X11 display (Linux only, optional for headless)
-xhost +local:root
+#### Mode 1: Complete Turnkey Simulation (Recommended)
+Docker runs both Gazebo and `student_controller.py` in the container. Any code changes made in `starter_kit/student_controller.py` take effect immediately on each launch because your folder is mounted live into the container:
+* **Windows (PowerShell):** `.\starter_kit\run_docker.ps1`
+* **Windows (Command Prompt):** `starter_kit\run_docker.bat`
+* **Linux / macOS / WSL:** `./starter_kit/run_docker.sh`
 
-# 2. Build local image and run the practice world
-./starter_kit/run_docker.sh
-```
+#### Mode 2: Interactive Controller Iteration (Two Terminals)
+Keep Gazebo running in the background and start/stop/restart your Python controller in a separate terminal:
+1. **Terminal 1: Start Gazebo Simulation Server**
+   * **Windows (PowerShell):** `.\starter_kit\run_docker.ps1 -ServerOnly`
+   * **Windows (Command Prompt):** `starter_kit\run_docker.bat --server-only`
+   * **Linux / macOS / WSL:** `./starter_kit/run_docker.sh --server-only`
+2. **Terminal 2: Run and debug your controller interactively**
+   * **Windows (PowerShell):** `.\starter_kit\run_controller.ps1`
+   * **Windows (Command Prompt):** `starter_kit\run_controller.bat`
+   * **Linux / macOS / WSL:** `./starter_kit/run_controller.sh`
+   *(Or manually: `docker exec -it ocean-regatta-sim python3 starter_kit/student_controller.py`)*
+
+#### 🌐 Viewing the 3D Simulation in your Browser:
+While the simulation runs inside Docker:
+* **Option 1 (Local WebViewer):** Open [http://localhost:8080](http://localhost:8080) in your web browser.
+* **Option 2 (Official Hosted Viewer):** Visit [https://app.gazebosim.org/visualization](https://app.gazebosim.org/visualization) and connect to `ws://localhost:9002`.
+
+---
 
 ### Option B: Native Installation (Ubuntu 24.04 / 22.04 with Gazebo Jetty)
-```bash
-# Terminal 1: Launch the 3D practice world
-gz sim -v 3 -r ./worlds/practice_world.sdf
 
-# Terminal 2: Run your Python controller
-python3 ./starter_kit/student_controller.py
+You can launch Gazebo either with its native Qt GUI window or in headless mode with WebSocket:
+
+```bash
+# Mode 1: Native 3D GUI Window (default)
+./starter_kit/run_local.sh --gui
+
+# Mode 2: Headless Gazebo Server with WebSocket (view in browser at http://localhost:8080)
+./starter_kit/run_local.sh --web
 ```
+
 
 ---
 

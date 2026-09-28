@@ -24,49 +24,70 @@ from typing import Dict, Optional, Callable
 
 # Gazebo Transport binding resolution (Gazebo Jetty -> Harmonic -> Garden)
 try:
-    from gz.transport14 import Node
+    from gz.transport import Node
 except ImportError:
     try:
-        from gz.transport13 import Node
+        from gz.transport15 import Node
     except ImportError:
         try:
-            from gz.transport12 import Node
+            from gz.transport14 import Node
         except ImportError:
             try:
-                from gz.transport import Node
+                from gz.transport13 import Node
             except ImportError:
-                raise ImportError(
-                    "Gazebo Transport Python bindings not found.\n"
-                    "Please install 'python3-gz-transport14' (Gazebo Jetty) or run within the provided Docker container."
-                )
+                try:
+                    from gz.transport12 import Node
+                except ImportError:
+                    raise ImportError(
+                        "\n[BlueBoatDriver] Gazebo Transport Python bindings are not installed on this host.\n"
+                        "Gazebo and its transport library run inside the provided Docker container.\n\n"
+                        "👉 Option A: Run the complete simulation turnkey (Gazebo + Controller in Docker):\n"
+                        "   PowerShell: .\\starter_kit\\run_docker.ps1\n"
+                        "   CMD:        starter_kit\\run_docker.bat\n"
+                        "   Bash:       ./starter_kit/run_docker.sh\n\n"
+                        "👉 Option B: Run Gazebo in Docker and run your controller in a separate terminal:\n"
+                        "   Terminal 1 (Gazebo Server): .\starter_kit\\run_docker.ps1 -ServerOnly\n"
+                        "   Terminal 2 (Controller):    .\\starter_kit\\run_controller.ps1\n"
+                        "   (Or: docker exec -it ocean-regatta-sim python3 starter_kit/student_controller.py)\n"
+                    )
 
 # Gazebo Protobuf message types resolution (Gazebo Jetty -> Harmonic -> Garden)
 try:
-    from gz.msgs11.double_pb2 import Double
-    from gz.msgs11.imu_pb2 import IMU
-    from gz.msgs11.navsat_pb2 import NavSat
-    from gz.msgs11.laserscan_pb2 import LaserScan
-    from gz.msgs11.pose_v_pb2 import Pose_V
+    from gz.msgs.double_pb2 import Double
+    from gz.msgs.imu_pb2 import IMU
+    from gz.msgs.navsat_pb2 import NavSat
+    from gz.msgs.laserscan_pb2 import LaserScan
+    from gz.msgs.pose_v_pb2 import Pose_V
 except ImportError:
     try:
-        from gz.msgs10.double_pb2 import Double
-        from gz.msgs10.imu_pb2 import IMU
-        from gz.msgs10.navsat_pb2 import NavSat
-        from gz.msgs10.laserscan_pb2 import LaserScan
-        from gz.msgs10.pose_v_pb2 import Pose_V
+        from gz.msgs12.double_pb2 import Double
+        from gz.msgs12.imu_pb2 import IMU
+        from gz.msgs12.navsat_pb2 import NavSat
+        from gz.msgs12.laserscan_pb2 import LaserScan
+        from gz.msgs12.pose_v_pb2 import Pose_V
     except ImportError:
         try:
-            from gz.msgs9.double_pb2 import Double
-            from gz.msgs9.imu_pb2 import IMU
-            from gz.msgs9.navsat_pb2 import NavSat
-            from gz.msgs9.laserscan_pb2 import LaserScan
-            from gz.msgs9.pose_v_pb2 import Pose_V
+            from gz.msgs11.double_pb2 import Double
+            from gz.msgs11.imu_pb2 import IMU
+            from gz.msgs11.navsat_pb2 import NavSat
+            from gz.msgs11.laserscan_pb2 import LaserScan
+            from gz.msgs11.pose_v_pb2 import Pose_V
         except ImportError:
-            from gz.msgs.double_pb2 import Double
-            from gz.msgs.imu_pb2 import IMU
-            from gz.msgs.navsat_pb2 import NavSat
-            from gz.msgs.laserscan_pb2 import LaserScan
-            from gz.msgs.pose_v_pb2 import Pose_V
+            try:
+                from gz.msgs10.double_pb2 import Double
+                from gz.msgs10.imu_pb2 import IMU
+                from gz.msgs10.navsat_pb2 import NavSat
+                from gz.msgs10.laserscan_pb2 import LaserScan
+                from gz.msgs10.pose_v_pb2 import Pose_V
+            except ImportError:
+                try:
+                    from gz.msgs9.double_pb2 import Double
+                    from gz.msgs9.imu_pb2 import IMU
+                    from gz.msgs9.navsat_pb2 import NavSat
+                    from gz.msgs9.laserscan_pb2 import LaserScan
+                    from gz.msgs9.pose_v_pb2 import Pose_V
+                except ImportError:
+                    raise ImportError("Gazebo msgs Protobuf bindings not found.")
 
 
 @dataclass
@@ -159,7 +180,7 @@ class BlueBoatDriver:
         self._node.subscribe(LaserScan, "/blueboat/ping2_port", self._on_ping2)
         self._node.subscribe(Pose_V, "/blueboat/detected_buoys", self._on_buoys)
 
-        print("[BlueBoatDriver] Connected to Gazebo Transport topics (/blueboat/*).")
+        print("[BlueBoatDriver] Connected via Native Gazebo Transport (/blueboat/*).")
 
     # --- Internal Protobuf Callbacks ---
 
@@ -188,11 +209,13 @@ class BlueBoatDriver:
         )
 
     def _on_gps(self, msg: NavSat):
-        x = (msg.latitude - self.LAT_ORIGIN) * self.METERS_PER_LAT
-        y = (msg.longitude - self.LON_ORIGIN) * self._meters_per_lon
+        lat = getattr(msg, "latitude_deg", getattr(msg, "latitude", 0.0))
+        lon = getattr(msg, "longitude_deg", getattr(msg, "longitude", 0.0))
+        x = (lat - self.LAT_ORIGIN) * self.METERS_PER_LAT
+        y = (lon - self.LON_ORIGIN) * self._meters_per_lon
         self._gps = GPSData(
-            latitude=msg.latitude,
-            longitude=msg.longitude,
+            latitude=lat,
+            longitude=lon,
             altitude=msg.altitude,
             x=x,
             y=y,
@@ -204,7 +227,7 @@ class BlueBoatDriver:
         now = time.time()
         if len(msg.ranges) > 0:
             val = float(msg.ranges[0])
-            if 0.5 <= val <= 30.0:
+            if not (math.isinf(val) or math.isnan(val)) and 0.5 <= val <= 30.0:
                 self._ping2 = Ping2Data(distance=val, is_valid=True, timestamp=now)
                 return
         # Out-of-range measurement

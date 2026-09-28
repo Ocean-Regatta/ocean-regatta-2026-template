@@ -21,6 +21,25 @@
       <uniform_fluid_density>1000.0</uniform_fluid_density>
     </plugin>
 
+    <!-- Native Gazebo Websocket Server for browser 3D visualization -->
+    <plugin
+        filename="gz-sim-websocket-server-system"
+        name="gz::sim::systems::WebsocketServer">
+      <publication_hz>30</publication_hz>
+      <port>9002</port>
+      <max_connections>-1</max_connections>
+    </plugin>
+
+
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>48.0</latitude_deg>
+      <longitude_deg>-4.5</longitude_deg>
+      <elevation>0.0</elevation>
+      <heading_deg>0.0</heading_deg>
+    </spherical_coordinates>
+
     <!-- Lighting & Water -->
     <light type="directional" name="sun">
       <cast_shadows>true</cast_shadows>

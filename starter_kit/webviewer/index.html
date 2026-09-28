@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ocean Regatta 2026 — Gazebo 3D WebViewer</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.85);
+      --accent: #38bdf8;
+      --accent-green: #22c55e;
+      --accent-red: #ef4444;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Top Navigation Header */
+    header {
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .brand span {
+      color: var(--accent);
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: var(--accent-red);
+      font-weight: 600;
+    }
+
+    .status-badge.connected {
+      background: rgba(34, 197, 94, 0.15);
+      border-color: rgba(34, 197, 94, 0.3);
+      color: var(--accent-green);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .btn {
+      background: var(--accent);
+      color: #0f172a;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--card-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--border);
+    }
+
+    /* Main Layout */
+    main {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #viewport-container {
+      flex: 1;
+      position: relative;
+      background: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+    }
+
+    #canvas3d {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* HUD Overlay */
+    .hud-overlay {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .hud-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      min-width: 220px;
+      pointer-events: auto;
+    }
+
+    .hud-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .hud-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .hud-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 16px;
+      margin-top: 6px;
+      font-size: 0.8rem;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+    }
+
+    .stat-val {
+      font-family: monospace;
+      font-weight: 600;
+      text-align: right;
+    }
+
+    /* Right Sidebar for Gazebo Inspector */
+    aside {
+      width: 340px;
+      background: rgba(15, 23, 42, 0.9);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      z-index: 5;
+    }
+
+    .sidebar-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-section h3 {
+      font-size: 0.9rem;
+      margin-bottom: 10px;
+      color: var(--text);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.85rem;
+    }
+
+    .topic-list {
+      list-style: none;
+      font-family: monospace;
+      font-size: 0.78rem;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+
+    .topic-item {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      padding: 6px 8px;
+      word-break: break-all;
+    }
+
+    .topic-name {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .topic-type {
+      color: var(--text-muted);
+      font-size: 0.7rem;
+    }
+
+    .guide-box {
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 0.8rem;
+      line-height: 1.4;
+      color: #bae6fd;
+    }
+
+    .guide-box a {
+      color: var(--accent);
+      font-weight: 600;
+    }
+  </style>
+  <!-- Load Three.js for 3D visualization -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      🚤 Ocean Regatta 2026 <span>3D WebViewer</span>
+    </div>
+
+    <div class="header-controls">
+      <div id="status-badge" class="status-badge">
+        <span class="status-dot"></span>
+        <span id="status-text">Disconnected</span>
+      </div>
+      <a href="https://app.gazebosim.org/visualization" target="_blank" class="btn btn-secondary">
+        🌐 Open Official app.gazebosim.org Viewer
+      </a>
+    </div>
+  </header>
+
+  <main>
+    <div id="viewport-container">
+      <canvas id="canvas3d"></canvas>
+
+      <!-- Heads-Up Display -->
+      <div class="hud-overlay">
+        <div class="hud-card">
+          <div class="hud-title">Vessel State (BlueBoat)</div>
+          <div id="hud-pos" class="hud-value">X: 0.00 | Y: 0.00</div>
+          <div class="hud-stats-grid">
+            <span class="stat-label">Heading (Yaw):</span>
+            <span id="hud-yaw" class="stat-val">0.0°</span>
+            <span class="stat-label">Linear Vel:</span>
+            <span id="hud-speed" class="stat-val">0.00 m/s</span>
+            <span class="stat-label">Sim Clock:</span>
+            <span id="hud-clock" class="stat-val">0.0 s</span>
+            <span class="stat-label">FPS:</span>
+            <span id="hud-fps" class="stat-val">60</span>
+          </div>
+        </div>
+
+        <div class="hud-card">
+          <div class="hud-title">Perception & Sonar</div>
+          <div class="hud-stats-grid">
+            <span class="stat-label">Ping2 Sonar:</span>
+            <span id="hud-ping2" class="stat-val" style="color: var(--accent-green);">Ready</span>
+            <span class="stat-label">Sonar Distance:</span>
+            <span id="hud-ping2-dist" class="stat-val">-- m</span>
+            <span class="stat-label">Tracked Buoys:</span>
+            <span id="hud-buoy-count" class="stat-val">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inspector Sidebar -->
+    <aside>
+      <div class="sidebar-section">
+        <h3>Native WebSocket Connection</h3>
+        <div class="input-group">
+          <input type="text" id="ws-url" value="ws://localhost:9002" placeholder="ws://localhost:9002">
+          <button id="btn-connect" class="btn">Connect</button>
+        </div>
+        <p style="font-size: 0.75rem; color: var(--text-muted);">
+          Connects directly to Gazebo Sim's <code>gz-sim-websocket-server-system</code>.
+        </p>
+      </div>
+
+      <div class="sidebar-section">
+        <h3>ℹ️ Official Gazebo Viewer</h3>
+        <div class="guide-box">
+          You can also view this simulation using the official Open Robotics viewer at:
+          <br><br>
+          <a href="https://app.gazebosim.org/visualization" target="_blank">👉 app.gazebosim.org/visualization</a>
+          <br><br>
+          <em>Note: In browser site settings for <code>app.gazebosim.org</code>, ensure "Insecure content" is set to "Allow" to enable unencrypted <code>ws://localhost:9002</code> access.</em>
+        </div>
+      </div>
+
+      <div class="sidebar-section" style="flex: 1;">
+        <h3>Subscribed Topics (<span id="topic-count">0</span>)</h3>
+        <ul id="topic-list" class="topic-list">
+          <li class="topic-item">
+            <div class="topic-name">/world/practice_world/pose/info</div>
+            <div class="topic-type">gz.msgs.Pose_V</div>
+          </li>
+          <li class="topic-item">
+            <div class="topic-name">/clock</div>
+            <div class="topic-type">gz.msgs.Clock</div>
+          </li>
+          <li class="topic-item">
+            <div class="topic-name">/blueboat/ping2_port</div>
+            <div class="topic-type">gz.msgs.LaserScan</div>
+          </li>
+          <li class="topic-item">
+            <div class="topic-name">/blueboat/imu</div>
+            <div class="topic-type">gz.msgs.IMU</div>
+          </li>
+          <li class="topic-item">
+            <div class="topic-name">/blueboat/gps</div>
+            <div class="topic-type">gz.msgs.NavSat</div>
+          </li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    // --- 3D Scene Initialization (Three.js) ---
+    const container = document.getElementById('viewport-container');
+    const canvas = document.getElementById('canvas3d');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a1628);
+    scene.fog = new THREE.FogExp2(0x0a1628, 0.008);
+
+    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(-15, 12, 10);
+
+    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.05; // Do not go under ocean plane
+    controls.target.set(10, 0, 0);
+
+    // Lights
+    const ambientLight = new THREE.AmbientLight(0xddeeff, 0.7);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    sunLight.position.set(30, 60, 40);
+    sunLight.castShadow = true;
+    scene.add(sunLight);
+
+    // Ocean Water Grid
+    const waterGeo = new THREE.PlaneGeometry(300, 300, 64, 64);
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x0c3b6d,
+      roughness: 0.15,
+      metalness: 0.8,
+      transparent: true,
+      opacity: 0.88,
+      wireframe: false
+    });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.rotation.x = -Math.PI / 2;
+    scene.add(water);
+
+    const gridHelper = new THREE.GridHelper(200, 40, 0x38bdf8, 0x1e3a5f);
+    gridHelper.position.y = 0.01;
+    scene.add(gridHelper);
+
+    // Environment Features (Gates, Pier Wall, Buoys)
+    const objects = {};
+
+    function createGateBuoy(x, y, isStarboard, name) {
+      const group = new THREE.Group();
+      group.position.set(x, 0, -y); // Convert Gazebo Y to Three.js Z
+
+      const color = isStarboard ? 0x22c55e : 0xef4444;
+      const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.3 });
+
+      // Body
+      const bodyGeo = isStarboard ? new THREE.ConeGeometry(0.3, 1.0, 16) : new THREE.CylinderGeometry(0.25, 0.25, 1.0, 16);
+      const body = new THREE.Mesh(bodyGeo, mat);
+      body.position.y = 0.5;
+      group.add(body);
+
+      // Topmark
+      const topGeo = isStarboard ? new THREE.ConeGeometry(0.18, 0.35, 16) : new THREE.CylinderGeometry(0.15, 0.15, 0.3, 16);
+      const topmark = new THREE.Mesh(topGeo, mat);
+      topmark.position.y = 1.15;
+      group.add(topmark);
+
+      scene.add(group);
+      objects[name] = group;
+      return group;
+    }
+
+    // Gate 1, 2, 3
+    createGateBuoy(12.0, 2.5, false, 'gate_port_1');
+    createGateBuoy(12.0, -2.5, true, 'gate_starboard_1');
+    createGateBuoy(24.0, 2.6, false, 'gate_port_2');
+    createGateBuoy(24.0, -2.4, true, 'gate_starboard_2');
+    createGateBuoy(36.0, 2.5, false, 'gate_port_3');
+    createGateBuoy(36.0, -2.5, true, 'gate_starboard_3');
+
+    // Cardinal Buoy (North)
+    const cardGroup = new THREE.Group();
+    cardGroup.position.set(46.0, 0, 0);
+    const cardBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.35, 0.35, 1.5, 16),
+      new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4 })
+    );
+    cardBody.position.y = 0.75;
+    cardGroup.add(cardBody);
+    scene.add(cardGroup);
+
+    // Pier Wall
+    const pierGeo = new THREE.BoxGeometry(55.0, 2.5, 4.0);
+    const pierMat = new THREE.MeshStandardMaterial({ color: 0x55606d, roughness: 0.7 });
+    const pier = new THREE.Mesh(pierGeo, pierMat);
+    pier.position.set(65.0, 1.25, 3.5); // Y=-3.5 in Gazebo is Z=+3.5 in Three.js
+    scene.add(pier);
+
+    // BlueBoat USV Model Representation
+    const boatGroup = new THREE.Group();
+    boatGroup.position.set(0, 0.1, 0);
+
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.3, metalness: 0.4 });
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 });
+    const antennaMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+
+    // Left Pontoon
+    const leftHull = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.2, 16), hullMat);
+    leftHull.rotation.x = Math.PI / 2;
+    leftHull.position.set(0, 0.05, -0.35);
+    boatGroup.add(leftHull);
+
+    // Right Pontoon
+    const rightHull = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.2, 16), hullMat);
+    rightHull.rotation.x = Math.PI / 2;
+    rightHull.position.set(0, 0.05, 0.35);
+    boatGroup.add(rightHull);
+
+    // Crossbars & Deck
+    const crossbar1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.8), frameMat);
+    crossbar1.position.set(0.3, 0.15, 0);
+    boatGroup.add(crossbar1);
+
+    const crossbar2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.8), frameMat);
+    crossbar2.position.set(-0.3, 0.15, 0);
+    boatGroup.add(crossbar2);
+
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.3), frameMat);
+    deck.position.set(0, 0.18, 0);
+    boatGroup.add(deck);
+
+    // Mast
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.45, 8), antennaMat);
+    mast.position.set(-0.15, 0.4, 0);
+    boatGroup.add(mast);
+
+    // Sonar Beam Line (Port / Left side)
+    const sonarGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0.1, -0.35),
+      new THREE.Vector3(0, 0.1, -5.35)
+    ]);
+    const sonarLine = new THREE.Line(sonarGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.7 }));
+    boatGroup.add(sonarLine);
+
+    scene.add(boatGroup);
+
+    // GPS Trajectory History Line
+    const maxTrailPoints = 300;
+    const trailPositions = new Float32Array(maxTrailPoints * 3);
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+    const trailMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2, transparent: true, opacity: 0.6 });
+    const trailLine = new THREE.Line(trailGeo, trailMat);
+    scene.add(trailLine);
+    let trailCount = 0;
+
+    // --- WebSocket Communication with Native Gazebo Server ---
+    let socket = null;
+    let isConnected = false;
+    let lastTime = performance.now();
+    let frameCount = 0;
+    let fps = 60;
+
+    const statusBadge = document.getElementById('status-badge');
+    const statusText = document.getElementById('status-text');
+    const btnConnect = document.getElementById('btn-connect');
+    const wsUrlInput = document.getElementById('ws-url');
+
+    function connectWebSocket() {
+      const url = wsUrlInput.value.trim() || 'ws://localhost:9002';
+      statusText.textContent = 'Connecting...';
+
+      if (socket) {
+        socket.close();
+      }
+
+      try {
+        socket = new WebSocket(url);
+      } catch (err) {
+        console.error("WebSocket init error:", err);
+        statusText.textContent = 'Error';
+        return;
+      }
+
+      socket.onopen = () => {
+        isConnected = true;
+        statusBadge.classList.add('connected');
+        statusText.textContent = 'Connected (Port 9002)';
+        btnConnect.textContent = 'Disconnect';
+
+        // Send Gazebo subscription frames
+        // Protocol: operation,topic_name,message_type,payload
+        sendMsg(['sub', '/world/practice_world/pose/info', '', '']);
+        sendMsg(['sub', '/world/practice_world/dynamic_pose/info', '', '']);
+        sendMsg(['sub', '/clock', '', '']);
+        sendMsg(['sub', '/blueboat/ping2_port', '', '']);
+        sendMsg(['sub', '/blueboat/imu', '', '']);
+        sendMsg(['sub', '/blueboat/gps', '', '']);
+
+        console.log("[Gazebo WS] Connected and subscriptions sent.");
+      };
+
+      socket.onclose = () => {
+        isConnected = false;
+        statusBadge.classList.remove('connected');
+        statusText.textContent = 'Disconnected';
+        btnConnect.textContent = 'Connect';
+        console.log("[Gazebo WS] Disconnected.");
+      };
+
+      socket.onerror = (err) => {
+        console.warn("[Gazebo WS] Connection error:", err);
+      };
+
+      socket.onmessage = (event) => {
+        handleGazeboFrame(event.data);
+      };
+    }
+
+    function sendMsg(frameParts) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(frameParts.join(','));
+      }
+    }
+
+    btnConnect.addEventListener('click', () => {
+      if (isConnected) {
+        if (socket) socket.close();
+      } else {
+        connectWebSocket();
+      }
+    });
+
+    // Handle Gazebo Frame: operation,topic,type,payload
+    function handleGazeboFrame(data) {
+      if (typeof data !== 'string') return;
+
+      const comma1 = data.indexOf(',');
+      if (comma1 === -1) return;
+      const comma2 = data.indexOf(',', comma1 + 1);
+      if (comma2 === -1) return;
+      const comma3 = data.indexOf(',', comma2 + 1);
+      if (comma3 === -1) return;
+
+      const op = data.substring(0, comma1);
+      const topic = data.substring(comma1 + 1, comma2);
+      const msgType = data.substring(comma2 + 1, comma3);
+      const payload = data.substring(comma3 + 1);
+
+      if (topic === '/clock') {
+        try {
+          // Clock payload or text
+          document.getElementById('hud-clock').textContent = payload.slice(0, 6) + ' s';
+        } catch (_) {}
+      }
+
+      // Live updates from pose info or sensor topics
+      if (topic.includes('pose') && payload) {
+        // If string representation or JSON-decoded
+        parsePoseUpdate(payload);
+      }
+    }
+
+    function parsePoseUpdate(payload) {
+      // Basic pose parser for text/JSON stream fallback
+      try {
+        const parsed = JSON.parse(payload);
+        if (parsed.x !== undefined && parsed.y !== undefined) {
+          updateBoatPose(parsed.x, parsed.y, parsed.z || 0.05, parsed.yaw || 0);
+        }
+      } catch (_) {}
+    }
+
+    function updateBoatPose(x, y, z, yaw) {
+      boatGroup.position.set(x, z, -y);
+      boatGroup.rotation.y = yaw;
+
+      document.getElementById('hud-pos').textContent = `X: ${x.toFixed(2)} | Y: ${y.toFixed(2)}`;
+      document.getElementById('hud-yaw').textContent = `${(yaw * 180 / Math.PI).toFixed(1)}°`;
+
+      // Update trail
+      if (trailCount < maxTrailPoints) {
+        trailPositions[trailCount * 3] = x;
+        trailPositions[trailCount * 3 + 1] = z;
+        trailPositions[trailCount * 3 + 2] = -y;
+        trailCount++;
+        trailGeo.attributes.position.needsUpdate = true;
+      }
+
+      // Smooth camera follow target
+      controls.target.lerp(new THREE.Vector3(x, 0.5, -y), 0.1);
+    }
+
+    // Auto-connect on load
+    window.addEventListener('load', () => {
+      connectWebSocket();
+    });
+
+    // Window Resize handling
+    window.addEventListener('resize', () => {
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    // Animation Loop
+    function animate(time) {
+      requestAnimationFrame(animate);
+
+      // Simple wave animation
+      const pos = waterGeo.attributes.position;
+      const count = pos.count;
+      for (let i = 0; i < count; i++) {
+        const u = pos.getX(i);
+        const v = pos.getY(i);
+        pos.setZ(i, Math.sin(u * 0.1 + time * 0.002) * 0.08 + Math.cos(v * 0.1 + time * 0.0015) * 0.06);
+      }
+      waterGeo.computeVertexNormals();
+      waterGeo.attributes.position.needsUpdate = true;
+
+      // FPS Counter
+      frameCount++;
+      if (time - lastTime >= 1000) {
+        fps = Math.round((frameCount * 1000) / (time - lastTime));
+        document.getElementById('hud-fps').textContent = fps;
+        frameCount = 0;
+        lastTime = time;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
