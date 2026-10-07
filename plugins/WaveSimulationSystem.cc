@@ -136,7 +136,7 @@ namespace regatta
         }
       }
 
-      // 3. Robot target & dynamic wave response parameters
+      // 3. Robot target
       if (_sdf->HasElement("robot_name"))
         this->robotName = _sdf->Get<std::string>("robot_name");
       if (_sdf->HasElement("robot_link"))
@@ -213,10 +213,6 @@ namespace regatta
                 << "s (lambda=" << w.wavelength << "m), Dir=" << w.directionDeg << " deg\n";
     }
     std::cout << " - Target Robot: " << this->robotName << " (" << this->robotLinkName << ")\n"
-              << " - Robot Wave Damping: Heave=" << this->waveHeaveDamping
-              << " Ns/m (K=" << this->waveHeaveStiffness << " N/m), Roll=" << this->waveRollDamping
-              << " Nms/rad (K=" << this->waveRollStiffness << " Nm/rad), Pitch=" << this->wavePitchDamping
-              << " Nms/rad (K=" << this->wavePitchStiffness << " Nm/rad)\n"
               << " - Buoy Heave Scale: " << this->buoyHeaveScale
               << ", Tilt Scale: " << this->buoyTiltScale << "\n"
               << "========================================================" << std::endl;
@@ -591,7 +587,7 @@ namespace regatta
     double deltaZ = waveState.elevation - (boatZ - 0.05);
     double relVelZ = waveState.velZ - linVel.Z();
     double heaveForce = this->waveHeaveStiffness * deltaZ + this->waveHeaveDamping * relVelZ;
-    heaveForce = std::clamp(heaveForce, -250.0, 250.0);
+    heaveForce = std::clamp(heaveForce, -50.0, 50.0);
 
     // 5. Wave-induced pitch and roll excitation moments (heading-aware in body frame)
     gz::math::Quaterniond waveRot = gz::math::Quaterniond::EulerToQuaternion(
@@ -604,10 +600,10 @@ namespace regatta
     gz::math::Vector3d bodyAngVel = boatPose.Rot().Inverse().RotateVector(angVel);
 
     double rollTorqueBody = this->waveRollStiffness * deltaRoll - this->waveRollDamping * bodyAngVel.X();
-    rollTorqueBody = std::clamp(rollTorqueBody, -70.0, 70.0);
+    rollTorqueBody = std::clamp(rollTorqueBody, -20.0, 20.0);
 
     double pitchTorqueBody = this->wavePitchStiffness * deltaPitch - this->wavePitchDamping * bodyAngVel.Y();
-    pitchTorqueBody = std::clamp(pitchTorqueBody, -60.0, 60.0);
+    pitchTorqueBody = std::clamp(pitchTorqueBody, -20.0, 20.0);
 
     // Rotate body moments into world coordinates for application
     gz::math::Vector3d totalTorque = boatPose.Rot().RotateVector(

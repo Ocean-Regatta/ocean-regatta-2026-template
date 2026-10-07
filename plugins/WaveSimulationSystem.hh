@@ -127,12 +127,12 @@ namespace regatta
 
     // Wave configuration
     private: std::vector<WaveComponent> waves;
-    private: double waveHeaveStiffness{1200.0};  // Buoyancy heave stiffness on boat (N/m)
-    private: double waveHeaveDamping{600.0};     // Heave damping on boat (N*s/m)
-    private: double wavePitchStiffness{90.0};    // Wave pitch moment stiffness on boat (N*m/rad)
-    private: double wavePitchDamping{70.0};      // Wave pitch damping on boat (N*m*s/rad)
-    private: double waveRollStiffness{100.0};    // Wave roll moment stiffness on boat (N*m/rad)
-    private: double waveRollDamping{80.0};       // Wave roll damping on boat (N*m*s/rad)
+    private: double waveHeaveStiffness{100.0};   // Buoyancy heave stiffness on boat (N/m)
+    private: double waveHeaveDamping{150.0};     // Heave damping on boat (N*s/m)
+    private: double wavePitchStiffness{15.0};    // Wave pitch moment stiffness on boat (N*m/rad)
+    private: double wavePitchDamping{30.0};      // Wave pitch damping on boat (N*m*s/rad)
+    private: double waveRollStiffness{15.0};     // Wave roll moment stiffness on boat (N*m/rad)
+    private: double waveRollDamping{30.0};       // Wave roll damping on boat (N*m*s/rad)
     private: double waveDriftCoeff{30.0};        // Wave drift force coefficient (N / m^2)
 
     // Buoy motion configuration

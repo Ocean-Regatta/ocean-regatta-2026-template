@@ -10,6 +10,9 @@ export GZ_SIM_SYSTEM_PLUGIN_PATH="${REPO_ROOT}/plugins/build:${REPO_ROOT}/build:
 export GZ_GUI_PLUGIN_PATH="${REPO_ROOT}/plugins/build:${REPO_ROOT}/build:${GZ_GUI_PLUGIN_PATH}"
 
 MODE="gui"
+WORLD_FILE="${REPO_ROOT}/worlds/practice_world.sdf"
+RUN_CONTROLLER="student"
+
 for arg in "$@"; do
     case "$arg" in
         --web|--headless)
@@ -17,6 +20,18 @@ for arg in "$@"; do
             ;;
         --gui)
             MODE="gui"
+            ;;
+        --flat)
+            WORLD_FILE="${REPO_ROOT}/worlds/flat_world.sdf"
+            ;;
+        --teleop)
+            RUN_CONTROLLER="teleop"
+            ;;
+        --no-controller)
+            RUN_CONTROLLER="none"
+            ;;
+        *.sdf)
+            WORLD_FILE="$arg"
             ;;
     esac
 done
@@ -43,12 +58,12 @@ if [ -d "${REPO_ROOT}/starter_kit/webviewer" ]; then
 fi
 
 if [ "$MODE" = "headless" ]; then
-    echo "=== [2/3] Starting Gazebo Sim (Headless Server with Native WebSocket) ==="
-    gz sim -s -r -v 2 "${REPO_ROOT}/worlds/practice_world.sdf" &
+    echo "=== [2/3] Starting Gazebo Sim (Headless Server with Native WebSocket) [${WORLD_FILE}] ==="
+    gz sim -s -r -v 2 "${WORLD_FILE}" &
     GZ_PID=$!
 else
-    echo "=== [2/3] Starting Gazebo Sim (3D Practice World GUI + Native WebSocket) ==="
-    gz sim -v 3 -r "${REPO_ROOT}/worlds/practice_world.sdf" &
+    echo "=== [2/3] Starting Gazebo Sim (3D GUI + Native WebSocket) [${WORLD_FILE}] ==="
+    gz sim -v 3 -r "${WORLD_FILE}" &
     GZ_PID=$!
 fi
 
@@ -61,9 +76,16 @@ echo " 🌐 Local 3D WebViewer:             http://localhost:8080"
 echo " 🌐 Hosted Official Viewer:        https://app.gazebosim.org/visualization"
 echo "================================================================================"
 
-echo "=== [3/3] Launching student controller ==="
-python3 "${REPO_ROOT}/starter_kit/student_controller.py" &
-STUDENT_PID=$!
-
-wait -n ${GZ_PID} ${STUDENT_PID} 2>/dev/null || wait ${GZ_PID} || true
+if [ "$RUN_CONTROLLER" = "teleop" ]; then
+    echo "=== [3/3] Launching Keyboard Teleop ==="
+    python3 "${REPO_ROOT}/starter_kit/teleop_keyboard.py"
+elif [ "$RUN_CONTROLLER" = "student" ]; then
+    echo "=== [3/3] Launching student controller ==="
+    python3 "${REPO_ROOT}/starter_kit/student_controller.py" &
+    STUDENT_PID=$!
+    wait -n ${GZ_PID} ${STUDENT_PID} 2>/dev/null || wait ${GZ_PID} || true
+else
+    echo "=== [3/3] Simulation running without controller (Ready for teleop or external script) ==="
+    wait ${GZ_PID} || true
+fi
 

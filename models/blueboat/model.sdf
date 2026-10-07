@@ -225,10 +225,10 @@
       filename="gz-sim-hydrodynamics-system"
       name="gz::sim::systems::Hydrodynamics">
       <link_name>base_link</link_name>
-      <xU>-20.0</xU><yV>-40.0</yV><zW>-250.0</zW>
-      <kP>-50.0</kP><mQ>-50.0</mQ><nR>-25.0</nR>
-      <xUabsU>-25.0</xUabsU><yVabsV>-60.0</yVabsV><zWabsW>-300.0</zWabsW>
-      <kPabsP>-40.0</kPabsP><mQabsQ>-40.0</mQabsQ><nRabsR>-25.0</nRabsR>
+      <xU>-15.0</xU><yV>-45.0</yV><zW>-50.0</zW>
+      <kP>-6.0</kP><mQ>-8.0</mQ><nR>-12.0</nR>
+      <xUabsU>-30.0</xUabsU><yVabsV>-52.0</yVabsV><zWabsW>-68.0</zWabsW>
+      <kPabsP>-6.0</kPabsP><mQabsQ>-10.0</mQabsQ><nRabsR>-22.0</nRabsR>
     </plugin>
 
     <!-- Thruster Plugins -->

@@ -151,12 +151,12 @@
       <robot_link>base_link</robot_link>
 
       <!-- Vessel wave excitation and damping parameters -->
-      <wave_heave_stiffness>1200.0</wave_heave_stiffness>
-      <wave_heave_damping>600.0</wave_heave_damping>
-      <wave_roll_stiffness>100.0</wave_roll_stiffness>
-      <wave_roll_damping>80.0</wave_roll_damping>
-      <wave_pitch_stiffness>90.0</wave_pitch_stiffness>
-      <wave_pitch_damping>70.0</wave_pitch_damping>
+      <wave_heave_stiffness>100.0</wave_heave_stiffness>
+      <wave_heave_damping>150.0</wave_heave_damping>
+      <wave_roll_stiffness>15.0</wave_roll_stiffness>
+      <wave_roll_damping>30.0</wave_roll_damping>
+      <wave_pitch_stiffness>15.0</wave_pitch_stiffness>
+      <wave_pitch_damping>30.0</wave_pitch_damping>
 
       <!-- Buoy oscillation response (movement relative to z, phi, theta) -->
       <buoy_heave_amplitude_scale>1.0</buoy_heave_amplitude_scale>

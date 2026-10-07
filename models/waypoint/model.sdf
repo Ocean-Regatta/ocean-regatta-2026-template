@@ -6,7 +6,7 @@
       <visual name="capsule_visual">
         <geometry>
           <ellipsoid>
-            <radii>3.0 3.0 0.4</radii>
+            <radii>1.5 1.5 0.4</radii>
           </ellipsoid>
         </geometry>
         <material>
