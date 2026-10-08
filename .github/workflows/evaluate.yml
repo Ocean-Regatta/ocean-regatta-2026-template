@@ -22,13 +22,15 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      issues: write
       actions: read
 
     steps:
       - name: Purge Runner Workspace Stale Outputs
         run: |
-          rm -rf "${{ github.workspace }}/output"
-          rm -f "${{ github.workspace }}/scoring_result.json" "${{ github.workspace }}/result.json"
+          docker run --rm -v "${{ github.workspace }}:/workspace" ubuntu rm -rf /workspace/output /workspace/scoring_result.json /workspace/result.json 2>/dev/null || true
+          rm -rf "${{ github.workspace }}/output" 2>/dev/null || true
+          rm -f "${{ github.workspace }}/scoring_result.json" "${{ github.workspace }}/result.json" 2>/dev/null || true
 
       - name: Verify Submission Target
         run: |
@@ -37,6 +39,18 @@ jobs:
             exit 1
           fi
           echo "Branch check passed: ${GITHUB_HEAD_REF} -> evaluation"
+
+      - name: Tag PR as Evaluation Only
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          echo "Applying 'do-not-merge' and 'evaluation-only' labels to PR #${PR_NUMBER}..."
+          curl -s -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/labels" \
+            -d '{"labels":["do-not-merge","evaluation-only"]}' >/dev/null 2>&1 || true
 
       - name: Check Evaluation Cooldown
         id: cooldown
@@ -224,7 +238,8 @@ jobs:
           fi
 
           if [ ! -f "${RESULT_FILE}" ]; then
-            COMMENT="### ❌ Evaluation failed to produce scoring output"$'\n\n'
+            COMMENT="> ⚠️ **Evaluation Only**: This pull request is used exclusively to trigger automated grading. It will not and must not be merged into \`evaluation\`."$'\n\n'
+            COMMENT+="### ❌ Evaluation failed to produce scoring output"$'\n\n'
             COMMENT+="Please review the simulation logs in the Actions tab."
             COMMENT_PAYLOAD=$(jq -n --arg body "${COMMENT}" '{body: $body}')
             curl -s -X POST \
@@ -256,7 +271,8 @@ jobs:
             COLOR_ALERT="### 🟡 Result: Timed Out"
           fi
 
-          PR_COMMENT="${COLOR_ALERT}"$'\n\n'
+          PR_COMMENT="> ⚠️ **Evaluation Only**: This pull request is used exclusively to trigger automated grading. It will not and must not be merged into \`evaluation\`."$'\n\n'
+          PR_COMMENT+="${COLOR_ALERT}"$'\n\n'
           PR_COMMENT+="| Metric | Result |"$'\n'
           PR_COMMENT+="| :--- | :--- |"$'\n'
           PR_COMMENT+="| **Status** | ${STATUS_EMOJI} |"$'\n'
