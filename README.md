@@ -190,8 +190,9 @@ To prevent spam and conserve GPU/CPU simulation server resources, **automated ev
    * Submits your validated result to the official **Live Scoreboard**.
 
 > [!NOTE]
-> **Evaluation Cooldown:**
-> To prevent over-optimizing to specific seeds, a **60-minute cooldown** is enforced between successive evaluation runs on the server.
+> **Evaluation Cooldown & Submission Window:**
+> * **Submission Window:** Submissions are evaluated strictly within the opening and closing datetimes configured in `editions.json`. Pull requests submitted before opening or after closing are rejected with a personalised notification comment on the PR.
+> * **Evaluation Cooldown:** To prevent over-optimizing to specific seeds, a **60-minute cooldown** is enforced between successive evaluation runs on the server.
 
 ### 🎥 3D Playback & Run Replay
 Every evaluation run records a full physical trajectory log:

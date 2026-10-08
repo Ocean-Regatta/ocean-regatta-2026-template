@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-10-08T18:00:00Z",
+  "default_edition": "2026",
+  "editions": {
+    "2026": {
+      "name": "Ocean Regatta 2026",
+      "description": "Autonomous Marine Robotics Challenge - 2026 Official Edition",
+      "opening_datetime": "2026-10-01T00:00:00Z",
+      "closing_datetime": "2026-10-31T23:59:59Z",
+      "timezone": "UTC",
+      "sessions": {
+        "main": {
+          "name": "Official Evaluation Window",
+          "opening_datetime": "2026-10-01T00:00:00Z",
+          "closing_datetime": "2026-10-31T23:59:59Z"
+        }
+      }
+    },
+    "2025": {
+      "name": "Ocean Regatta 2025",
+      "description": "Ocean Regatta 2025 (Archived Past Edition)",
+      "opening_datetime": "2025-10-01T00:00:00Z",
+      "closing_datetime": "2025-10-31T23:59:59Z",
+      "timezone": "UTC"
+    }
+  }
+}
+

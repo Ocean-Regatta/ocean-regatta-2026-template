@@ -51,7 +51,8 @@ def check_participant(file_path, username):
                 "display_name": entry.get("display_name") or entry.get("team") or entry.get("username", username),
                 "team": entry.get("team", username),
                 "affiliation": entry.get("affiliation", ""),
-                "status": status
+                "status": status,
+                "edition": entry.get("edition", "")
             }
             print(json.dumps(res))
             return 0
@@ -125,7 +126,7 @@ def parse_issue_form(body_text, fallback_user=None):
     return result
 
 
-def add_or_update_participant(file_path, username, team, display_name=None, affiliation=None, status="approved", approved_by="admin", issue_number=None):
+def add_or_update_participant(file_path, username, team, display_name=None, affiliation=None, status="approved", approved_by="admin", issue_number=None, edition=None):
     user_key = (username or "").strip().lstrip("@").lower()
     clean_username = (username or "").strip().lstrip("@")
     if not user_key:
@@ -144,6 +145,7 @@ def add_or_update_participant(file_path, username, team, display_name=None, affi
         "display_name": display_name or team or clean_username,
         "affiliation": affiliation if affiliation is not None else existing.get("affiliation", ""),
         "status": status,
+        "edition": edition or existing.get("edition") or "2026",
         "registered_at": reg_date,
         "approved_at": now_iso,
         "approved_by": approved_by,
@@ -182,6 +184,7 @@ def main():
     add_p.add_argument("--display-name", default=None, help="Display name (defaults to team)")
     add_p.add_argument("--affiliation", default="", help="Affiliation/University/Company")
     add_p.add_argument("--status", default="approved", choices=["approved", "suspended"], help="Participant status")
+    add_p.add_argument("--edition", default=None, help="Target regatta edition (e.g. 2026)")
     add_p.add_argument("--approved-by", default="admin", help="Organizer login who approved")
     add_p.add_argument("--issue-number", type=int, default=None, help="GitHub issue number")
 
@@ -208,6 +211,7 @@ def main():
             display_name=args.display_name,
             affiliation=args.affiliation,
             status=args.status,
+            edition=args.edition,
             approved_by=args.approved_by,
             issue_number=args.issue_number
         )
