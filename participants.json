@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-10-08T15:50:00Z",
+  "participants": {
+    "teusner": {
+      "username": "Teusner",
+      "team": "Regatta Committee",
+      "display_name": "Teusner (Organizer)",
+      "affiliation": "Ocean Regatta Staff",
+      "status": "approved",
+      "registered_at": "2026-10-08T00:00:00Z",
+      "approved_by": "initial_seed"
+    }
+  }
+}

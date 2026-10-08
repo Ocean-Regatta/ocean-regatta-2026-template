@@ -166,8 +166,15 @@ Docker provides a turnkey environment containing Gazebo Jetty and all required s
 
 ---
 
-## 📤 Submission & Automated Evaluation
+## 📤 Registration, Submission & Automated Evaluation
 
+### 📝 Step 0: Register Your Account
+To prevent spam and conserve GPU/CPU simulation server resources, **automated evaluation runs exclusively for verified participants**:
+1. Visit the [Registration Portal on ocean-regatta.github.io](https://ocean-regatta.github.io/register/).
+2. Submit a [Competitor Registration Request](https://github.com/Ocean-Regatta/ocean-regatta-2026-template/issues/new?template=registration_request.yml) issue on this repository.
+3. Once approved by the organizers (usually within 24 hours), your GitHub account is automatically added to the official participant registry, and your submissions will be simulated.
+
+### 🚀 Step 1: Submit Your Code for Automated Grading
 1. Create a dedicated feature branch:
    ```bash
    git checkout -b feature/my-cool-strategy

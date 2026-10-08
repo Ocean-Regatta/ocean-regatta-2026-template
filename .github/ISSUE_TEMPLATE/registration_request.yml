@@ -1,0 +1,56 @@
+name: 📝 Competitor Registration Request
+description: Request registration to compete in Ocean Regatta 2026 and unlock automated evaluation.
+title: "[Registration]: @<your-github-username>"
+labels: ["registration-pending"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🚤 Welcome to Ocean Regatta 2026 Registration!
+        To conserve computational resources on our automated simulation servers, each competitor or team must be registered and verified before opening Pull Requests.
+        
+        Fill out the information below. Once approved by the organizers, your account will be added to the official participant registry, and your evaluation PRs will run automatically!
+
+  - type: input
+    id: github_username
+    attributes:
+      label: GitHub Username
+      description: Your exact GitHub account handle (without '@'). Pull requests opened by this account will be evaluated.
+      placeholder: e.g. octocat
+    validations:
+      required: true
+
+  - type: input
+    id: team_name
+    attributes:
+      label: Team / Competitor Name
+      description: The name you want displayed on the official leaderboard and evaluation reports.
+      placeholder: e.g. Autonomous Mariners / BlueBoat Wizards
+    validations:
+      required: true
+
+  - type: input
+    id: affiliation
+    attributes:
+      label: Affiliation / Institution
+      description: Your school, university, lab, company, or "Independent".
+      placeholder: e.g. ENSTA Bretagne / Robotics Club / Independent
+    validations:
+      required: false
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Brief Strategy / Background (Optional)
+      description: Tell us a bit about yourself or your algorithmic approach (PID, Pure Pursuit, MPC, RL, etc.).
+      placeholder: e.g. Developing a differential-thrust line-of-sight guidance controller.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Competition Agreement
+      options:
+        - label: I agree to follow the regatta rules, fair play guidelines, and cooldown limits (60 minutes between submissions).
+          required: true

@@ -26,12 +26,6 @@ jobs:
       actions: read
 
     steps:
-      - name: Purge Runner Workspace Stale Outputs and Permissions
-        run: |
-          docker run --rm -v "${{ github.workspace }}:/workspace" ubuntu bash -c "rm -rf /workspace/output /workspace/scoring_result.json /workspace/starter_kit/__pycache__; chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true" 2>/dev/null || true
-          rm -rf "${{ github.workspace }}/output" "${{ github.workspace }}/starter_kit/__pycache__" 2>/dev/null || true
-          rm -f "${{ github.workspace }}/scoring_result.json" 2>/dev/null || true
-
       - name: Verify Submission Target
         run: |
           if [ "${{ github.base_ref }}" != "evaluation" ]; then
@@ -39,6 +33,82 @@ jobs:
             exit 1
           fi
           echo "Branch check passed: ${GITHUB_HEAD_REF} -> evaluation"
+
+      - name: Verify Participant Registration
+        id: participant_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          STUDENT_LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          echo "Verifying competitor registration for @${STUDENT_LOGIN}..."
+          LOGIN_LOWER=$(echo "${STUDENT_LOGIN}" | tr '[:upper:]' '[:lower:]')
+
+          # Always fetch participants.json from the base branch to prevent untrusted PR tampering
+          HTTP_CODE=$(curl -s -o /tmp/raw_participants_resp.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/contents/participants.json?ref=${{ github.base_ref }}")
+
+          if [ "${HTTP_CODE}" = "200" ]; then
+            jq -r '.content' /tmp/raw_participants_resp.json | base64 -d > /tmp/participants.json
+          elif [ -f "${{ github.workspace }}/participants.json" ]; then
+            echo "::warning::Base branch API fetch returned ${HTTP_CODE}. Using runner workspace copy."
+            cp "${{ github.workspace }}/participants.json" /tmp/participants.json
+          else
+            echo "::error::participants.json registry not found on ${{ github.base_ref }}."
+            exit 1
+          fi
+
+          IS_APPROVED=$(jq -r --arg user "${LOGIN_LOWER}" '
+            if .participants[$user] and (.participants[$user].status == "approved" or .participants[$user].status == null) then
+              "true"
+            else
+              "false"
+            end
+          ' /tmp/participants.json 2>/dev/null || echo "false")
+
+          if [ "${IS_APPROVED}" != "true" ]; then
+            echo "::error::Competitor @${STUDENT_LOGIN} is not registered or approved on the participant registry!"
+
+            # Tag PR with unregistered label
+            curl -s -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/labels" \
+              -d '{"labels":["unregistered"]}' >/dev/null 2>&1 || true
+
+            COMMENT="> ⛔ **Evaluation Aborted: Unregistered Competitor**"$'\n\n'
+            COMMENT+="Hello @${STUDENT_LOGIN}!"$'\n\n'
+            COMMENT+="Your pull request was not evaluated because your GitHub username is not on the verified participant list for **Ocean Regatta 2026**."$'\n\n'
+            COMMENT+="To prevent unauthorized resource consumption on our simulation servers, automated evaluations run exclusively for registered competitors."$'\n\n'
+            COMMENT+="### 📝 How to Register:"$'\n'
+            COMMENT+="1. Visit the [Registration Guide on ocean-regatta.github.io](https://ocean-regatta.github.io/register/)."$'\n'
+            COMMENT+="2. Open a [Competitor Registration Request](https://github.com/${{ github.repository }}/issues/new?template=registration_request.yml&title=%5BRegistration%5D%3A+%40${STUDENT_LOGIN}&github_username=${STUDENT_LOGIN}) issue."$'\n'
+            COMMENT+="3. Once approved by the organizers, simply push a new commit or close & reopen this PR to launch your evaluation run."$'\n\n'
+            COMMENT+="*(If your team is registered under a different handle, please notify the organizers)*"
+
+            COMMENT_PAYLOAD=$(jq -n --arg body "${COMMENT}" '{body: $body}')
+            curl -s -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              -d "${COMMENT_PAYLOAD}" >/dev/null 2>&1 || true
+
+            exit 1
+          fi
+
+          DISPLAY_NAME=$(jq -r --arg user "${LOGIN_LOWER}" '.participants[$user].display_name // .participants[$user].team // empty' /tmp/participants.json 2>/dev/null || true)
+          TEAM_NAME=$(jq -r --arg user "${LOGIN_LOWER}" '.participants[$user].team // empty' /tmp/participants.json 2>/dev/null || true)
+          echo "DISPLAY_NAME=${DISPLAY_NAME:-${STUDENT_LOGIN}}" >> $GITHUB_ENV
+          echo "TEAM_NAME=${TEAM_NAME:-${STUDENT_LOGIN}}" >> $GITHUB_ENV
+          echo "Registration verified for @${STUDENT_LOGIN} ('${DISPLAY_NAME:-${STUDENT_LOGIN}}'). Proceeding with evaluation."
+
+      - name: Purge Runner Workspace Stale Outputs and Permissions
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/workspace" ubuntu bash -c "rm -rf /workspace/output /workspace/scoring_result.json /workspace/starter_kit/__pycache__; chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true" 2>/dev/null || true
+          rm -rf "${{ github.workspace }}/output" "${{ github.workspace }}/starter_kit/__pycache__" 2>/dev/null || true
+          rm -f "${{ github.workspace }}/scoring_result.json" 2>/dev/null || true
 
       - name: Tag PR as Evaluation Only
         env:
@@ -200,7 +270,8 @@ jobs:
           python3 "${{ github.workspace }}/scripts/update_leaderboard.py" \
             --result "${RESULT_FILE}" \
             --leaderboard "${TARGET_DATA_FILE}" \
-            --team "${STUDENT_LOGIN}"
+            --team "${STUDENT_LOGIN}" \
+            --display-name "${DISPLAY_NAME:-${STUDENT_LOGIN}}"
 
           # Mirror to 2026-edition specific and root data files if they exist in repo
           if [ -f "/tmp/scoreboard_repo/docs/data/leaderboard_2026.json" ]; then
@@ -273,6 +344,7 @@ jobs:
           PR_COMMENT+="${COLOR_ALERT}"$'\n\n'
           PR_COMMENT+="| Metric | Result |"$'\n'
           PR_COMMENT+="| :--- | :--- |"$'\n'
+          PR_COMMENT+="| **Competitor / Team** | **${DISPLAY_NAME:-${STUDENT_LOGIN}}** (@${STUDENT_LOGIN}) |"$'\n'
           PR_COMMENT+="| **Status** | ${STATUS_EMOJI} |"$'\n'
           PR_COMMENT+="| **Score Awarded** | **${SCORE} / ${MAX_SCORE} pts** |"$'\n'
           PR_COMMENT+="| **Simulated Time** | ${SIM_TIME} s |"$'\n'

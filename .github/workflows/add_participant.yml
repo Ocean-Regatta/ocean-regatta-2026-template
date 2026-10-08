@@ -1,0 +1,96 @@
+name: Manual Participant Management
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: "GitHub Username to add/update"
+        required: true
+        type: string
+      team_name:
+        description: "Team or Display Name"
+        required: true
+        type: string
+      affiliation:
+        description: "Affiliation (e.g. University / Company)"
+        required: false
+        default: "Independent"
+        type: string
+      status:
+        description: "Registration Status"
+        required: true
+        default: "approved"
+        type: choice
+        options:
+          - approved
+          - suspended
+
+permissions:
+  contents: write
+
+jobs:
+  manage_participant:
+    name: Add or Update Participant
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Operator
+        env:
+          SENDER: ${{ github.actor }}
+          ADMIN_USER: "Teusner"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Operator: ${SENDER}"
+          if [ "${SENDER}" = "${ADMIN_USER}" ]; then
+            echo "Authorized administrator: ${SENDER}"
+            exit 0
+          fi
+
+          PERM_RESP=$(curl -s -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/collaborators/${SENDER}/permission")
+
+          PERM=$(echo "${PERM_RESP}" | jq -r '.permission // "none"')
+          if [[ "${PERM}" =~ ^(admin|write)$ ]]; then
+            echo "Authorized: ${SENDER} has ${PERM} access."
+          else
+            echo "::error::Unauthorized operator ${SENDER}."
+            exit 1
+          fi
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: evaluation
+          fetch-depth: 0
+
+      - name: Update Participant Registry
+        env:
+          USERNAME: ${{ github.event.inputs.username }}
+          TEAM: ${{ github.event.inputs.team_name }}
+          AFFILIATION: ${{ github.event.inputs.affiliation }}
+          STATUS: ${{ github.event.inputs.status }}
+          APPROVER: ${{ github.actor }}
+        run: |
+          echo "Updating registry for @${USERNAME}..."
+          python3 scripts/manage_participants.py add \
+            --file participants.json \
+            --username "${USERNAME}" \
+            --team "${TEAM}" \
+            --affiliation "${AFFILIATION}" \
+            --status "${STATUS}" \
+            --approved-by "${APPROVER}"
+
+          git config user.name "Ocean Regatta Referee Bot"
+          git config user.email "bot@ocean-regatta.org"
+
+          git add participants.json
+          git commit -m "chore(participants): manually update @${USERNAME} (${STATUS}) [skip ci]" || echo "No changes to commit"
+          git push origin evaluation
+
+          # Sync to main branch
+          git checkout main
+          git checkout evaluation -- participants.json
+          git commit -m "chore(participants): sync registry to main [skip ci]" || echo "No changes to sync"
+          git push origin main || echo "::warning::Could not push to main"
+
+          echo "Participant @${USERNAME} successfully set to '${STATUS}'."

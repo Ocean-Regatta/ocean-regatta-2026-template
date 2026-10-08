@@ -1,0 +1,185 @@
+name: Approve Regatta Participant
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: read
+
+jobs:
+  approve:
+    name: Process Participant Approval
+    runs-on: ubuntu-latest
+    # Only run on 'approved' label OR '/approve' comment on an issue (not a PR)
+    if: >-
+      (github.event_name == 'issues' && github.event.label.name == 'approved') ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request == null && contains(github.event.comment.body, '/approve'))
+
+    steps:
+      - name: Verify Approver Authorization
+        id: auth_check
+        env:
+          SENDER: ${{ github.event.sender.login }}
+          ADMIN_USER: "Teusner"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Checking authorization for user: ${SENDER}..."
+
+          # Always authorize designated admin
+          if [ "${SENDER}" = "${ADMIN_USER}" ]; then
+            echo "Authorized: ${SENDER} is the primary regatta administrator."
+            echo "is_authorized=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check repository permission via GitHub API
+          PERM_RESP=$(curl -s -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/collaborators/${SENDER}/permission")
+
+          PERM=$(echo "${PERM_RESP}" | jq -r '.permission // "none"')
+          echo "Collaborator permission for ${SENDER}: ${PERM}"
+
+          if [[ "${PERM}" =~ ^(admin|write)$ ]]; then
+            echo "Authorized: ${SENDER} has ${PERM} access."
+            echo "is_authorized=true" >> $GITHUB_OUTPUT
+          else
+            echo "::error::Unauthorized approval attempt by ${SENDER}."
+            echo "is_authorized=false" >> $GITHUB_OUTPUT
+
+            # Remove 'approved' label if it was applied by an unauthorized user
+            curl -s -X DELETE \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/labels/approved" >/dev/null 2>&1 || true
+
+            # Post warning comment
+            COMMENT="⚠️ **Unauthorized action**: Only repository administrators can approve registrations."
+            curl -s -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
+              -d "$(jq -n --arg b "${COMMENT}" '{body: $b}')" >/dev/null 2>&1 || true
+
+            exit 1
+          fi
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: evaluation
+          fetch-depth: 0
+
+      - name: Parse Registration Issue
+        id: parse
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+        run: |
+          echo "Parsing registration fields from issue #${{ github.event.issue.number }}..."
+          python3 scripts/manage_participants.py parse-issue \
+            --body-text "${ISSUE_BODY}" \
+            --fallback-user "${ISSUE_AUTHOR}" > /tmp/parsed_participant.json
+
+          cat /tmp/parsed_participant.json
+
+          USERNAME=$(jq -r '.username' /tmp/parsed_participant.json)
+          TEAM=$(jq -r '.team' /tmp/parsed_participant.json)
+          AFFILIATION=$(jq -r '.affiliation // ""' /tmp/parsed_participant.json)
+
+          if [ -z "${USERNAME}" ] || [ "${USERNAME}" = "null" ]; then
+            USERNAME="${ISSUE_AUTHOR}"
+          fi
+          if [ -z "${TEAM}" ] || [ "${TEAM}" = "null" ]; then
+            TEAM="${USERNAME}"
+          fi
+
+          echo "username=${USERNAME}" >> $GITHUB_OUTPUT
+          echo "team=${TEAM}" >> $GITHUB_OUTPUT
+          echo "affiliation=${AFFILIATION}" >> $GITHUB_OUTPUT
+
+      - name: Update Participant Registry
+        env:
+          USERNAME: ${{ steps.parse.outputs.username }}
+          TEAM: ${{ steps.parse.outputs.team }}
+          AFFILIATION: ${{ steps.parse.outputs.affiliation }}
+          APPROVER: ${{ github.event.sender.login }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+        run: |
+          echo "Adding participant @${USERNAME} (${TEAM}) to participants.json..."
+          python3 scripts/manage_participants.py add \
+            --file participants.json \
+            --username "${USERNAME}" \
+            --team "${TEAM}" \
+            --affiliation "${AFFILIATION}" \
+            --approved-by "${APPROVER}" \
+            --issue-number "${ISSUE_NUM}" \
+            --status "approved"
+
+          git config user.name "Ocean Regatta Referee Bot"
+          git config user.email "bot@ocean-regatta.org"
+
+          git add participants.json
+          git commit -m "chore(participants): approve @${USERNAME} (${TEAM}) [skip ci]" || echo "No changes to commit"
+          git push origin evaluation
+
+          # Sync to main branch as well
+          git checkout main
+          git checkout evaluation -- participants.json
+          git commit -m "chore(participants): sync registry to main [skip ci]" || echo "No changes to sync to main"
+          git push origin main || echo "::warning::Could not push to main (may require branch sync)"
+
+      - name: Post Approval Confirmation & Close Issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          USERNAME: ${{ steps.parse.outputs.username }}
+          TEAM: ${{ steps.parse.outputs.team }}
+          AFFILIATION: ${{ steps.parse.outputs.affiliation }}
+          APPROVER: ${{ github.event.sender.login }}
+        run: |
+          COMMENT="### 🎉 Registration Approved!"$'\n\n'
+          COMMENT+="Welcome **${TEAM}** (@${USERNAME}) to **Ocean Regatta 2026**!"$'\n\n'
+          COMMENT+="| Detail | Value |"$'\n'
+          COMMENT+="| :--- | :--- |"$'\n'
+          COMMENT+="| **GitHub Account** | \`@${USERNAME}\` |"$'\n'
+          COMMENT+="| **Team / Display Name** | **${TEAM}** |"$'\n'
+          if [ -n "${AFFILIATION}" ]; then
+            COMMENT+="| **Affiliation** | ${AFFILIATION} |"$'\n'
+          fi
+          COMMENT+="| **Approved By** | \`@${APPROVER}\` |"$'\n\n'
+          COMMENT+="Your account is now registered in \`participants.json\`. You can open Pull Requests targeting the \`evaluation\` branch to trigger the automated evaluation simulator!"$'\n\n'
+          COMMENT+="Good luck and fair winds! 🚤🌊"
+
+          COMMENT_PAYLOAD=$(jq -n --arg b "${COMMENT}" '{body: $b}')
+          curl -s -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${ISSUE_NUM}/comments" \
+            -d "${COMMENT_PAYLOAD}" >/dev/null 2>&1 || true
+
+          # Remove 'registration-pending' label and ensure 'approved' is present
+          curl -s -X DELETE \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${ISSUE_NUM}/labels/registration-pending" >/dev/null 2>&1 || true
+
+          curl -s -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${ISSUE_NUM}/labels" \
+            -d '{"labels":["approved","registered"]}' >/dev/null 2>&1 || true
+
+          # Close issue as completed
+          curl -s -X PATCH \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${ISSUE_NUM}" \
+            -d '{"state":"closed","state_reason":"completed"}' >/dev/null 2>&1 || true
+
+          echo "Registration issue #${ISSUE_NUM} processed and closed successfully."
