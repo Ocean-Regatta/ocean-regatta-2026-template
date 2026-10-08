@@ -34,6 +34,7 @@ export GZ_SIM_SYSTEM_PLUGIN_PATH="/workspace/plugins/build:/workspace/build:${GZ
 export GZ_GUI_PLUGIN_PATH="/workspace/plugins/build:/workspace/build:${GZ_GUI_PLUGIN_PATH}"
 export REGATTA_EXIT_ON_FINISH=1
 export PYTHONUNBUFFERED=1
+export PYTHONDONTWRITEBYTECODE=1
 
 cleanup() {
     echo "[run_headless_eval] Cleaning up background processes..."

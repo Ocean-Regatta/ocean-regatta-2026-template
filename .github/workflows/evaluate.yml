@@ -26,10 +26,10 @@ jobs:
       actions: read
 
     steps:
-      - name: Purge Runner Workspace Stale Outputs
+      - name: Purge Runner Workspace Stale Outputs and Permissions
         run: |
-          docker run --rm -v "${{ github.workspace }}:/workspace" ubuntu rm -rf /workspace/output /workspace/scoring_result.json /workspace/result.json 2>/dev/null || true
-          rm -rf "${{ github.workspace }}/output" 2>/dev/null || true
+          docker run --rm -v "${{ github.workspace }}:/workspace" ubuntu bash -c "rm -rf /workspace/output /workspace/scoring_result.json /workspace/result.json /workspace/starter_kit/__pycache__; chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true" 2>/dev/null || true
+          rm -rf "${{ github.workspace }}/output" "${{ github.workspace }}/starter_kit/__pycache__" 2>/dev/null || true
           rm -f "${{ github.workspace }}/scoring_result.json" "${{ github.workspace }}/result.json" 2>/dev/null || true
 
       - name: Verify Submission Target
@@ -150,6 +150,7 @@ jobs:
             --network none \
             --memory 4g \
             --cpus 2 \
+            -e PYTHONDONTWRITEBYTECODE=1 \
             -v "${{ github.workspace }}:/workspace:rw" \
             -v "${{ github.workspace }}/output:/workspace/output:rw" \
             -v "${{ github.workspace }}/starter_kit/student_controller.py:/workspace/starter_kit/student_controller.py:ro" \
