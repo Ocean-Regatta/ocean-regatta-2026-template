@@ -4,6 +4,7 @@ __pycache__/
 *.pyd
 local_output/
 output/
+scoring_result.json
 .venv/
 venv/
 .DS_Store

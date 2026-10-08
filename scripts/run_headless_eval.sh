@@ -133,8 +133,25 @@ if [ -n "${FOUND_SCORING}" ]; then
     cp "${FOUND_SCORING}" "${OUTPUT_DIR}/result.json"
     echo "Scoring output normalized to ${OUTPUT_DIR}/scoring_result.json and ${OUTPUT_DIR}/result.json"
 else
-    echo "::error::Simulation finished but no fresh scoring_result.json was found!"
-    exit 1
+    echo "::warning::Scoring plugin did not write JSON (simulation stopped before finish/timeout). Generating fallback scorecard..."
+    cat << EOF > "${OUTPUT_DIR}/scoring_result.json"
+{
+  "score": 0.0,
+  "total_score": 0.0,
+  "waypoint_score": 0.0,
+  "max_score": 22.0,
+  "sim_time": ${ELAPSED:-0.0},
+  "reason": "TIMEOUT_OR_ABORTED",
+  "success": false,
+  "finish_line_crossed": false,
+  "waypoints_cleared": 0,
+  "total_waypoints": 11,
+  "collision": false,
+  "penalties": 0.0
+}
+EOF
+    cp "${OUTPUT_DIR}/scoring_result.json" "${OUTPUT_DIR}/result.json"
+    echo "Fallback scoring record written to ${OUTPUT_DIR}/scoring_result.json"
 fi
 
 # Make sure all output files can be read by runner and user
