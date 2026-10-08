@@ -33,15 +33,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          # Allow bypassing cooldown with [force-eval] in PR title
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          if echo "${PR_TITLE}" | grep -qi "\[force-eval\]"; then
+            echo "Force evaluation flag detected in PR title. Skipping cooldown check."
+            exit 0
+          fi
+
           echo "Verifying last evaluation timestamp for PR #${PR_NUMBER}..."
           CURRENT_TIME=$(date +%s)
 
-          LAST_RUN_DATE=$(gh run list \
-            --workflow="evaluate.yml" \
-            --json status,createdAt,databaseId \
-            --jq '[.[] | select(.status == "completed")] | first | .createdAt // empty' 2>/dev/null || true)
+          # Query GitHub API directly for the last completed evaluation run
+          LAST_RUN_DATE=$(curl -s \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/evaluate.yml/runs?status=completed&per_page=10" \
+            | jq -r '[.workflow_runs[] | select(.pull_requests[]?.number == ('"${PR_NUMBER}"'))] | first | .created_at // empty' 2>/dev/null || true)
 
-          if [ -n "${LAST_RUN_DATE}" ]; then
+          if [ -n "${LAST_RUN_DATE}" ] && [ "${LAST_RUN_DATE}" != "null" ]; then
             LAST_RUN_EPOCH=$(date -d "${LAST_RUN_DATE}" +%s 2>/dev/null || echo 0)
             DIFF_SECONDS=$((CURRENT_TIME - LAST_RUN_EPOCH))
             COOLDOWN_SECONDS=3600
@@ -52,9 +61,16 @@ jobs:
 
               COMMENT="### ⏳ Evaluation rejected: 60-minute cooldown active"$'\n\n'
               COMMENT+="Your last evaluation occurred **${ELAPSED_MIN} minute(s)** ago."$'\n\n'
-              COMMENT+="To prevent random seed overfitting, please wait **${REMAINING_MIN} more minute(s)** before submitting a new commit."
+              COMMENT+="To prevent random seed overfitting, please wait **${REMAINING_MIN} more minute(s)** before submitting a new commit."$'\n\n'
+              COMMENT+="*(Tip for instructors/testing: add \`[force-eval]\` in the PR title to bypass)*"
 
-              gh pr comment ${PR_NUMBER} --body "${COMMENT}" 2>/dev/null || true
+              COMMENT_PAYLOAD=$(jq -n --arg body "${COMMENT}" '{body: $body}')
+              curl -s -X POST \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+                -d "${COMMENT_PAYLOAD}" >/dev/null 2>&1 || true
+
               echo "::error::Cooldown active! Wait ${REMAINING_MIN} more minutes before submitting a new commit."
               exit 1
             fi
@@ -143,6 +159,7 @@ jobs:
           rm -rf /tmp/scoreboard_repo
           git clone "https://x-access-token:${LEADERBOARD_PUSH_TOKEN}@github.com/Ocean-Regatta/ocean-regatta.github.io.git" /tmp/scoreboard_repo
 
+          # Locate target leaderboard file
           TARGET_DATA_FILE="/tmp/scoreboard_repo/docs/data/leaderboard.json"
           if [ ! -f "${TARGET_DATA_FILE}" ] && [ -f "/tmp/scoreboard_repo/data/leaderboard.json" ]; then
             TARGET_DATA_FILE="/tmp/scoreboard_repo/data/leaderboard.json"
@@ -153,11 +170,23 @@ jobs:
             --leaderboard "${TARGET_DATA_FILE}" \
             --team "${STUDENT_LOGIN}"
 
+          # Mirror to 2026-edition specific and root data files if they exist in repo
+          if [ -f "/tmp/scoreboard_repo/docs/data/leaderboard_2026.json" ]; then
+            cp "${TARGET_DATA_FILE}" "/tmp/scoreboard_repo/docs/data/leaderboard_2026.json"
+          fi
+          if [ -f "/tmp/scoreboard_repo/data/leaderboard_2026.json" ]; then
+            cp "${TARGET_DATA_FILE}" "/tmp/scoreboard_repo/data/leaderboard_2026.json"
+          fi
+          if [ -f "/tmp/scoreboard_repo/data/leaderboard.json" ]; then
+            cp "${TARGET_DATA_FILE}" "/tmp/scoreboard_repo/data/leaderboard.json"
+          fi
+
           cd /tmp/scoreboard_repo
           git config user.name "Ocean Regatta Referee Bot"
           git config user.email "bot@ocean-regatta.org"
           git add -A
-          git commit -m "chore(scoreboard): update leaderboard for ${STUDENT_LOGIN} (${{ env.TAG_NAME }}) [skip ci]" || echo "No leaderboard changes to commit."
+          # Notice: No [skip ci] so that GitHub Pages / deploy_docs.yml automatically builds and deploys the new scoreboard!
+          git commit -m "chore(scoreboard): update leaderboard for ${STUDENT_LOGIN} (${{ env.TAG_NAME }})" || echo "No leaderboard changes to commit."
           git push origin main || git push origin master || echo "::warning::Failed to push updated scoreboard."
           echo "Scoreboard successfully updated on ocean-regatta.github.io!"
 
@@ -176,7 +205,12 @@ jobs:
           if [ ! -f "${RESULT_FILE}" ]; then
             COMMENT="### ❌ Evaluation failed to produce scoring output"$'\n\n'
             COMMENT+="Please review the simulation logs in the Actions tab."
-            gh pr comment ${PR_NUMBER} --body "${COMMENT}" 2>/dev/null || true
+            COMMENT_PAYLOAD=$(jq -n --arg body "${COMMENT}" '{body: $body}')
+            curl -s -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              -d "${COMMENT_PAYLOAD}" >/dev/null 2>&1 || true
             exit 1
           fi
 
@@ -220,7 +254,21 @@ jobs:
           PR_COMMENT+="gz sim --playback ./output/replay"$'\n'
           PR_COMMENT+="\`\`\`"$'\n'
 
-          gh pr comment ${PR_NUMBER} --body "${PR_COMMENT}" 2>/dev/null || echo "PR comment posted or skipped (if token not allowed)."
+          echo "Posting evaluation report to PR #${PR_NUMBER} via GitHub API..."
+          COMMENT_PAYLOAD=$(jq -n --arg body "${PR_COMMENT}" '{body: $body}')
+          HTTP_CODE=$(curl -s -o /tmp/pr_comment_resp.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            -d "${COMMENT_PAYLOAD}")
+
+          if [ "${HTTP_CODE}" = "201" ]; then
+            echo "PR comment posted successfully (HTTP 201)!"
+          else
+            echo "::warning::Failed to post PR comment (HTTP ${HTTP_CODE}). Response:"
+            cat /tmp/pr_comment_resp.json 2>/dev/null || true
+          fi
 
           if [ "${SUCCESS}" != "true" ]; then
             exit 1
