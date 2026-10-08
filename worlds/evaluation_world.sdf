@@ -33,10 +33,10 @@
       <cardinal_radius>20.0</cardinal_radius>
       <cardinal_penalty>2.0</cardinal_penalty>
       <max_points_per_waypoint>2.0</max_points_per_waypoint>
-      <timeout>1800.0</timeout>
+      <timeout>300.0</timeout>
       <output_file>scoring_result.json</output_file>
       <!-- Set exit_on_finish to true to close GUI windows and completely exit Gazebo when finished/timed out -->
-      <exit_on_finish>false</exit_on_finish>
+      <exit_on_finish>true</exit_on_finish>
     </plugin>
 
     <!-- GUI Configuration & Live Scoring Widget -->

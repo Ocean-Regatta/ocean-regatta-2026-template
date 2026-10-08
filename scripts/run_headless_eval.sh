@@ -5,12 +5,13 @@ set -e
 # Ocean Regatta 2026 — Headless Simulation & Evaluation Launcher
 #
 # Runs Gazebo Jetty headless (-s) with the automated scoring plugin, launches
-# the student controller, monitors execution, and captures scoring_result.json.
+# the student controller, monitors execution, and captures scoring_result.json
+# and the 3D replay playback logs (state.tlog).
 # ==============================================================================
 
 WORLD_FILE="${1:-/workspace/worlds/evaluation_world.sdf}"
 OUTPUT_DIR="${2:-/workspace/output}"
-TIMEOUT_SECONDS="${3:-300}"
+TIMEOUT_SECONDS="${3:-315}"
 
 echo "===================================================================="
 echo " 🌊 Ocean Regatta 2026 — Headless Evaluation Runner"
@@ -20,7 +21,11 @@ echo "Output Dir:      ${OUTPUT_DIR}"
 echo "Max Timeout:     ${TIMEOUT_SECONDS}s"
 echo "===================================================================="
 
-mkdir -p "${OUTPUT_DIR}/replay"
+# Clean up any leftover artifacts from prior runs to ensure fresh data
+rm -f /workspace/scoring_result.json /workspace/result.json
+rm -f "${OUTPUT_DIR}/scoring_result.json" "${OUTPUT_DIR}/result.json"
+rm -rf "${OUTPUT_DIR}/replay" "${OUTPUT_DIR}/replay(1)"
+mkdir -p "${OUTPUT_DIR}"
 chmod -R 777 "${OUTPUT_DIR}" 2>/dev/null || true
 
 # Gazebo plugin & resource paths
@@ -36,12 +41,15 @@ cleanup() {
         kill -TERM "${CONTROLLER_PID}" 2>/dev/null || true
     fi
     if [ -n "${GZ_PID}" ]; then
+        kill -INT "${GZ_PID}" 2>/dev/null || true
+        sleep 1
         kill -TERM "${GZ_PID}" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT SIGINT SIGTERM
 
-echo "=== [1/3] Starting Gazebo Headless Server ==="
+echo "=== [1/3] Starting Gazebo Headless Server with Recording ==="
+# Notice: Do not pre-create ${OUTPUT_DIR}/replay so Gazebo creates it without appending '(1)'
 gz sim -s -r -v 2 \
     --record \
     --record-path "${OUTPUT_DIR}/replay" \
@@ -70,9 +78,10 @@ START_TIME=$(date +%s)
 while kill -0 "${GZ_PID}" 2>/dev/null; do
     ELAPSED=$(( $(date +%s) - START_TIME ))
     if [ ${ELAPSED} -ge ${TIMEOUT_SECONDS} ]; then
-        echo "::warning::Evaluation reached maximum timeout (${TIMEOUT_SECONDS}s). Forcing shutdown..."
+        echo "::warning::Evaluation reached maximum safety timeout (${TIMEOUT_SECONDS}s). Forcing graceful shutdown..."
+        # Send SIGINT first to let Gazebo and ScoringSystem finalize files and logs
         kill -INT "${GZ_PID}" 2>/dev/null || true
-        sleep 2
+        sleep 3
         kill -TERM "${GZ_PID}" 2>/dev/null || true
         break
     fi
@@ -89,6 +98,21 @@ fi
 
 echo "Gazebo simulation terminated."
 
+# Normalize replay directory if Gazebo created replay(1)
+if [ -d "${OUTPUT_DIR}/replay(1)" ]; then
+    if [ ! -d "${OUTPUT_DIR}/replay" ] || [ ! -f "${OUTPUT_DIR}/replay/state.tlog" ]; then
+        rm -rf "${OUTPUT_DIR}/replay"
+        mv "${OUTPUT_DIR}/replay(1)" "${OUTPUT_DIR}/replay"
+    fi
+fi
+
+if [ -f "${OUTPUT_DIR}/replay/state.tlog" ]; then
+    REPLAY_SIZE=$(du -sh "${OUTPUT_DIR}/replay/state.tlog" 2>/dev/null | cut -f1 || echo "OK")
+    echo "Gazebo 3D replay log successfully captured (${REPLAY_SIZE}) in ${OUTPUT_DIR}/replay"
+else
+    echo "::warning::Replay state.tlog not found in ${OUTPUT_DIR}/replay"
+fi
+
 # Locate generated scoring file (ScoringSystem outputs to /workspace or current dir)
 FOUND_SCORING=""
 for candidate in \
@@ -96,7 +120,7 @@ for candidate in \
     "scoring_result.json" \
     "/output/result.json" \
     "${OUTPUT_DIR}/result.json" \
-    "/output/scoring_result.json"; do
+    "${OUTPUT_DIR}/scoring_result.json"; do
     if [ -f "${candidate}" ]; then
         FOUND_SCORING="${candidate}"
         break
@@ -104,16 +128,18 @@ for candidate in \
 done
 
 if [ -n "${FOUND_SCORING}" ]; then
-    echo "Found scoring result at: ${FOUND_SCORING}"
+    echo "Found fresh scoring result at: ${FOUND_SCORING}"
     cp "${FOUND_SCORING}" "${OUTPUT_DIR}/scoring_result.json"
     cp "${FOUND_SCORING}" "${OUTPUT_DIR}/result.json"
     echo "Scoring output normalized to ${OUTPUT_DIR}/scoring_result.json and ${OUTPUT_DIR}/result.json"
 else
-    echo "::error::Simulation finished but no scoring_result.json was found!"
+    echo "::error::Simulation finished but no fresh scoring_result.json was found!"
     exit 1
 fi
+
+# Make sure all output files can be read by runner and user
+chmod -R 777 "${OUTPUT_DIR}" 2>/dev/null || true
 
 echo "===================================================================="
 echo " Headless evaluation finished successfully!"
 echo "===================================================================="
-
