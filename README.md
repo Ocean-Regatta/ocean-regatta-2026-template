@@ -203,7 +203,7 @@ You can launch Gazebo either with its native Qt GUI window or in headless mode w
    git commit -m "feat: improve Ping2 wall following and gate alignment"
    git push origin feature/my-cool-strategy
    ```
-2. Open a **Pull Request** targeting the `master` branch on GitHub.
+2. Open a **Pull Request** targeting the `evaluation` branch on GitHub.
 3. The automated evaluation workflow triggers immediately:
    * It provisions an isolated headless simulation container.
    * Tests your controller against a secret environmental seed with currents and wavelets.
