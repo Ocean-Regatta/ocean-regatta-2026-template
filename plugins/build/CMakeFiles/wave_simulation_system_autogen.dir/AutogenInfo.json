@@ -1138,7 +1138,7 @@
 		"/workspace/plugins/build/scoring_system_autogen/mocs_compilation.cpp"
 	],
 	"MULTI_CONFIG" : false,
-	"PARALLEL" : 24,
+	"PARALLEL" : 6,
 	"PARSE_CACHE_FILE" : "/workspace/plugins/build/CMakeFiles/wave_simulation_system_autogen.dir/ParseCache.txt",
 	"QT_MOC_EXECUTABLE" : "/usr/lib/qt6/libexec/moc",
 	"QT_UIC_EXECUTABLE" : "",

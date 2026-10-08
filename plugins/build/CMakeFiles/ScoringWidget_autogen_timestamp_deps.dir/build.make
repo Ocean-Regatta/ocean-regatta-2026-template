@@ -67,11 +67,11 @@ include CMakeFiles/ScoringWidget_autogen_timestamp_deps.dir/compiler_depend.make
 include CMakeFiles/ScoringWidget_autogen_timestamp_deps.dir/progress.make
 
 CMakeFiles/ScoringWidget_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libQt6Core.so.6.4.2
+CMakeFiles/ScoringWidget_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libgz-gui.so.10.1.0
 CMakeFiles/ScoringWidget_autogen_timestamp_deps: /usr/lib/qt6/libexec/moc
-CMakeFiles/ScoringWidget_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libQt6Widgets.so.6.4.2
 CMakeFiles/ScoringWidget_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libQt6Qml.so.6.4.2
 CMakeFiles/ScoringWidget_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libQt6Quick.so.6.4.2
-CMakeFiles/ScoringWidget_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libgz-gui.so.10.1.0
+CMakeFiles/ScoringWidget_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libQt6Widgets.so.6.4.2
 
 ScoringWidget_autogen_timestamp_deps: CMakeFiles/ScoringWidget_autogen_timestamp_deps
 ScoringWidget_autogen_timestamp_deps: CMakeFiles/ScoringWidget_autogen_timestamp_deps.dir/build.make

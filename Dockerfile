@@ -3,13 +3,13 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 
-ARG PROXY="http://proxy.ecole-navale.fr:8080"
-ENV http_proxy=${PROXY} \
-    https_proxy=${PROXY} \
-    HTTP_PROXY=${PROXY} \
-    HTTPS_PROXY=${PROXY} \
-    no_proxy="localhost,127.0.0.1" \
-    NO_PROXY="localhost,127.0.0.1"
+# ARG PROXY="http://proxy.ecole-navale.fr:8080"
+# ENV http_proxy=${PROXY} \
+#     https_proxy=${PROXY} \
+#     HTTP_PROXY=${PROXY} \
+#     HTTPS_PROXY=${PROXY} \
+#     no_proxy="localhost,127.0.0.1" \
+#     NO_PROXY="localhost,127.0.0.1"
     
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \

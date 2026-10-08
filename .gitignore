@@ -5,6 +5,9 @@ __pycache__/
 local_output/
 output/
 scoring_result.json
+result.json
+*.log
+*.tlog
 .venv/
 venv/
 .DS_Store

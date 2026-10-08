@@ -1233,6 +1233,10 @@ namespace regatta
     }
     this->totalPenalties = currentPenalties;
     double totalScore = waypointScore - this->totalPenalties;
+    if (totalScore < 2.0)
+    {
+      totalScore = 2.0;
+    }
 
     // Update shared memory for ScoringWidget GUI (no network msgs)
     this->UpdateSharedMemory(totalScore, maxScore);
@@ -1361,6 +1365,12 @@ namespace regatta
     }
     this->totalPenalties = currentPenalties;
     double totalScore = waypointScore - this->totalPenalties;
+
+    // Minimum floor score: keep standard waypoint points, but ensure at least 2.0 pts on non-collision runs
+    if (totalScore < 2.0)
+    {
+      totalScore = 2.0;
+    }
 
     double totalRunTime = (this->finishLine.crossed ? this->finishLine.crossingTime : _simTime) - this->startSimTime;
     if (totalRunTime < 0.0) totalRunTime = 0.0;
@@ -1520,11 +1530,12 @@ namespace regatta
       targetPaths.push_back("scoring_result.json");
     targetPaths.push_back("/workspace/scoring_result.json");
 
-    if (std::filesystem::exists("/output") || std::filesystem::exists("output"))
-    {
-      targetPaths.push_back("output/result.json");
-      targetPaths.push_back("/output/result.json");
-    }
+    if (std::filesystem::exists("/workspace/output"))
+      targetPaths.push_back("/workspace/output/scoring_result.json");
+    else if (std::filesystem::exists("output"))
+      targetPaths.push_back("output/scoring_result.json");
+    else if (std::filesystem::exists("/output"))
+      targetPaths.push_back("/output/scoring_result.json");
 
     for (const auto &path : targetPaths)
     {

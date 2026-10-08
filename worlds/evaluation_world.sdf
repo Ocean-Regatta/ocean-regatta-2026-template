@@ -246,7 +246,7 @@
     <include>
       <uri>model://green_cone_buoy</uri>
       <name>gate_starboard_1</name>
-      <pose>1.5 15 0.4 0 0 0</pose>d
+      <pose>1.5 15 0.4 0 0 0</pose>
     </include>
 
     <!-- Second Gate -->

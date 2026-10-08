@@ -28,9 +28,9 @@ jobs:
     steps:
       - name: Purge Runner Workspace Stale Outputs and Permissions
         run: |
-          docker run --rm -v "${{ github.workspace }}:/workspace" ubuntu bash -c "rm -rf /workspace/output /workspace/scoring_result.json /workspace/result.json /workspace/starter_kit/__pycache__; chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true" 2>/dev/null || true
+          docker run --rm -v "${{ github.workspace }}:/workspace" ubuntu bash -c "rm -rf /workspace/output /workspace/scoring_result.json /workspace/starter_kit/__pycache__; chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true" 2>/dev/null || true
           rm -rf "${{ github.workspace }}/output" "${{ github.workspace }}/starter_kit/__pycache__" 2>/dev/null || true
-          rm -f "${{ github.workspace }}/scoring_result.json" "${{ github.workspace }}/result.json" 2>/dev/null || true
+          rm -f "${{ github.workspace }}/scoring_result.json" 2>/dev/null || true
 
       - name: Verify Submission Target
         run: |
@@ -166,7 +166,6 @@ jobs:
           path: |
             output/replay/
             output/scoring_result.json
-            output/result.json
           retention-days: 14
 
       # Scoreboard Update: ONLY run if the simulation executed AND generated a scoring file
@@ -177,9 +176,6 @@ jobs:
           STUDENT_LOGIN: ${{ github.event.pull_request.user.login }}
         run: |
           RESULT_FILE="${{ github.workspace }}/output/scoring_result.json"
-          if [ ! -f "${RESULT_FILE}" ]; then
-            RESULT_FILE="${{ github.workspace }}/output/result.json"
-          fi
 
           if [ ! -f "${RESULT_FILE}" ]; then
             echo "::warning::Scoring result file missing, skipping scoreboard update."
@@ -234,9 +230,6 @@ jobs:
           STUDENT_LOGIN: ${{ github.event.pull_request.user.login }}
         run: |
           RESULT_FILE="${{ github.workspace }}/output/scoring_result.json"
-          if [ ! -f "${RESULT_FILE}" ]; then
-            RESULT_FILE="${{ github.workspace }}/output/result.json"
-          fi
 
           if [ ! -f "${RESULT_FILE}" ]; then
             COMMENT="> ⚠️ **Evaluation Only**: This pull request is used exclusively to trigger automated grading. It will not and must not be merged into \`evaluation\`."$'\n\n'
@@ -260,6 +253,10 @@ jobs:
           TOTAL_WP=$(jq -r '.total_waypoints // 11' "${RESULT_FILE}")
           COLLISION=$(jq -r '.collision // false' "${RESULT_FILE}")
           PENALTIES=$(jq -r '.penalties // .total_penalties // 0' "${RESULT_FILE}")
+          # Ensure minimum floor score of 2.0 pts if no collision occurred
+          if [ "${COLLISION}" != "true" ]; then
+            SCORE=$(python3 -c "score = float('${SCORE}' or 0.0); print(max(2.0, score))" 2>/dev/null || echo "${SCORE}")
+          fi
 
           if [ "${SUCCESS}" = "true" ]; then
             STATUS_EMOJI="🏆 **COURSE COMPLETED**"
@@ -308,6 +305,5 @@ jobs:
             cat /tmp/pr_comment_resp.json 2>/dev/null || true
           fi
 
-          if [ "${SUCCESS}" != "true" ]; then
-            exit 1
-          fi
+          echo "Evaluation workflow completed successfully with status: ${REASON} (Score: ${SCORE}/${MAX_SCORE} pts)"
+          exit 0

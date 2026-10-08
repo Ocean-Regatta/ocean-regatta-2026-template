@@ -219,6 +219,10 @@ def update_leaderboard(result_file, leaderboard_file, team_name, display_name=No
     collision = bool(res.get("collision", False))
     drift_exceeded = bool(res.get("critical_drift_exceeded", False))
 
+    # Minimum floor score: ensure at least 2.0 pts if no collision
+    if not collision and score < 2.0:
+        score = 2.0
+
     wp_cleared = int(res.get("waypoints_cleared", 0))
     wp_total = int(res.get("total_waypoints", len(res.get("waypoints", [])) or 11))
 
@@ -314,7 +318,7 @@ def update_leaderboard(result_file, leaderboard_file, team_name, display_name=No
 
 def main():
     parser = argparse.ArgumentParser(description="Update static Ocean Regatta leaderboard.json")
-    parser.add_argument("--result", required=True, help="Path to simulation scoring_result.json or result.json")
+    parser.add_argument("--result", required=True, help="Path to simulation scoring_result.json")
     parser.add_argument("--leaderboard", required=True, help="Path to docs/data/leaderboard.json")
     parser.add_argument("--team", required=True, help="GitHub login / Team handle")
     parser.add_argument("--display-name", default=None, help="Optional friendly display name")
