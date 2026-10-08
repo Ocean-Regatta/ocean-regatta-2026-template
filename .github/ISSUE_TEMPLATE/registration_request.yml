@@ -54,3 +54,4 @@ body:
       options:
         - label: I agree to follow the regatta rules, fair play guidelines, and cooldown limits (60 minutes between submissions).
           required: true
+

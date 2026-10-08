@@ -183,3 +183,4 @@ jobs:
             -d '{"state":"closed","state_reason":"completed"}' >/dev/null 2>&1 || true
 
           echo "Registration issue #${ISSUE_NUM} processed and closed successfully."
+
