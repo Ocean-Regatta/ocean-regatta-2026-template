@@ -10,6 +10,11 @@ concurrency:
   group: eval-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
+env:
+  # Cooldown duration between evaluations on the same PR (in seconds).
+  # Set to 0 for unlimited runs during testing; set to 3600 for 60-min production cooldown.
+  COOLDOWN_SECONDS: 0
+
 jobs:
   evaluate:
     name: Headless Simulation & Scoring
@@ -20,6 +25,11 @@ jobs:
       actions: read
 
     steps:
+      - name: Purge Runner Workspace Stale Outputs
+        run: |
+          rm -rf "${{ github.workspace }}/output"
+          rm -f "${{ github.workspace }}/scoring_result.json" "${{ github.workspace }}/result.json"
+
       - name: Verify Submission Target
         run: |
           if [ "${{ github.base_ref }}" != "evaluation" ]; then
@@ -28,22 +38,29 @@ jobs:
           fi
           echo "Branch check passed: ${GITHUB_HEAD_REF} -> evaluation"
 
-      - name: Check Evaluation Cooldown (60 min)
+      - name: Check Evaluation Cooldown
+        id: cooldown
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          COOLDOWN: ${{ env.COOLDOWN_SECONDS }}
         run: |
-          # Allow bypassing cooldown with [force-eval] in PR title
+          if [ "${COOLDOWN:-0}" -le 0 ]; then
+            echo "Cooldown disabled (COOLDOWN_SECONDS=${COOLDOWN}). Skipping check."
+            exit 0
+          fi
+
+          # Allow bypassing cooldown with [force-eval] in PR title or body
           PR_TITLE="${{ github.event.pull_request.title }}"
-          if echo "${PR_TITLE}" | grep -qi "\[force-eval\]"; then
-            echo "Force evaluation flag detected in PR title. Skipping cooldown check."
+          PR_BODY="${{ github.event.pull_request.body }}"
+          if echo "${PR_TITLE} ${PR_BODY}" | grep -qi "\[force-eval\]"; then
+            echo "Force evaluation flag detected. Skipping cooldown check."
             exit 0
           fi
 
           echo "Verifying last evaluation timestamp for PR #${PR_NUMBER}..."
           CURRENT_TIME=$(date +%s)
 
-          # Query GitHub API directly for the last completed evaluation run
           LAST_RUN_DATE=$(curl -s \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
@@ -53,13 +70,12 @@ jobs:
           if [ -n "${LAST_RUN_DATE}" ] && [ "${LAST_RUN_DATE}" != "null" ]; then
             LAST_RUN_EPOCH=$(date -d "${LAST_RUN_DATE}" +%s 2>/dev/null || echo 0)
             DIFF_SECONDS=$((CURRENT_TIME - LAST_RUN_EPOCH))
-            COOLDOWN_SECONDS=3600
 
-            if [ ${DIFF_SECONDS} -lt ${COOLDOWN_SECONDS} ] && [ ${LAST_RUN_EPOCH} -gt 0 ]; then
-              REMAINING_MIN=$(( (COOLDOWN_SECONDS - DIFF_SECONDS) / 60 ))
+            if [ ${DIFF_SECONDS} -lt ${COOLDOWN} ] && [ ${LAST_RUN_EPOCH} -gt 0 ]; then
+              REMAINING_MIN=$(( (${COOLDOWN} - DIFF_SECONDS) / 60 ))
               ELAPSED_MIN=$(( DIFF_SECONDS / 60 ))
 
-              COMMENT="### ⏳ Evaluation rejected: 60-minute cooldown active"$'\n\n'
+              COMMENT="### ⏳ Evaluation rejected: cooldown active"$'\n\n'
               COMMENT+="Your last evaluation occurred **${ELAPSED_MIN} minute(s)** ago."$'\n\n'
               COMMENT+="To prevent random seed overfitting, please wait **${REMAINING_MIN} more minute(s)** before submitting a new commit."$'\n\n'
               COMMENT+="*(Tip for instructors/testing: add \`[force-eval]\` in the PR title to bypass)*"
@@ -107,8 +123,11 @@ jobs:
           fi
 
       - name: Execute Isolated Docker Simulation
+        id: sim
         timeout-minutes: 6
         run: |
+          # Fresh output folder for this evaluation run
+          rm -rf "${{ github.workspace }}/output"
           mkdir -p "${{ github.workspace }}/output"
           chmod -R 777 "${{ github.workspace }}/output"
 
@@ -123,9 +142,10 @@ jobs:
             ocean-regatta-evaluator:latest \
             bash /workspace/scripts/run_headless_eval.sh /workspace/worlds/evaluation_world.sdf /workspace/output 300
 
+      # Upload Artifact: ONLY run if the simulation step was executed
       - name: Upload Simulation Playback Log
         uses: actions/upload-artifact@v4
-        if: always()
+        if: steps.sim.outcome == 'success' || steps.sim.outcome == 'failure'
         with:
           name: gz-replay-pr-${{ github.event.pull_request.number }}-${{ env.TAG_NAME }}
           path: |
@@ -134,8 +154,9 @@ jobs:
             output/result.json
           retention-days: 14
 
+      # Scoreboard Update: ONLY run if the simulation executed AND generated a scoring file
       - name: Update Official Scoreboard on ocean-regatta.github.io
-        if: always()
+        if: steps.sim.outcome == 'success' || steps.sim.outcome == 'failure'
         env:
           LEADERBOARD_PUSH_TOKEN: ${{ secrets.LEADERBOARD_PUSH_TOKEN }}
           STUDENT_LOGIN: ${{ github.event.pull_request.user.login }}
@@ -185,13 +206,13 @@ jobs:
           git config user.name "Ocean Regatta Referee Bot"
           git config user.email "bot@ocean-regatta.org"
           git add -A
-          # Notice: No [skip ci] so that GitHub Pages / deploy_docs.yml automatically builds and deploys the new scoreboard!
           git commit -m "chore(scoreboard): update leaderboard for ${STUDENT_LOGIN} (${{ env.TAG_NAME }})" || echo "No leaderboard changes to commit."
           git push origin main || git push origin master || echo "::warning::Failed to push updated scoreboard."
           echo "Scoreboard successfully updated on ocean-regatta.github.io!"
 
+      # PR Comment: ONLY run if the simulation step was executed
       - name: Publish Evaluation Report on Pull Request
-        if: always()
+        if: steps.sim.outcome == 'success' || steps.sim.outcome == 'failure'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
