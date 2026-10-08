@@ -1,0 +1,12 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="ScoringWidget/">
+  <file>ScoringWidget.qml</file>
+</qresource>
+<qresource prefix="scoring_widget/">
+  <file alias="scoring_widget.qml">ScoringWidget.qml</file>
+</qresource>
+<qresource prefix="libscoring_widget.so/">
+  <file alias="libscoring_widget.so.qml">ScoringWidget.qml</file>
+</qresource>
+</RCC>
+

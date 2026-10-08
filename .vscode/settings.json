@@ -1,0 +1,5 @@
+{
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python-envs.pythonProjects": [],
+    "cmake.sourceDirectory": "/mnt/data/gazebo_2026/ocean-regatta-2026-template/plugins"
+}

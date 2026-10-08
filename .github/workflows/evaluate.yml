@@ -1,0 +1,309 @@
+name: Automated Regatta Evaluator
+
+on:
+  pull_request:
+    branches:
+      - evaluation
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: eval-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  # Cooldown duration between evaluations on the same PR (in seconds).
+  # 3600 seconds = 60-minute production cooldown to prevent random seed overfitting.
+  COOLDOWN_SECONDS: 3600
+
+jobs:
+  evaluate:
+    name: Headless Simulation & Scoring
+    runs-on: [self-hosted, linux]
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+
+    steps:
+      - name: Purge Runner Workspace Stale Outputs and Permissions
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/workspace" ubuntu bash -c "rm -rf /workspace/output /workspace/scoring_result.json /workspace/starter_kit/__pycache__; chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true" 2>/dev/null || true
+          rm -rf "${{ github.workspace }}/output" "${{ github.workspace }}/starter_kit/__pycache__" 2>/dev/null || true
+          rm -f "${{ github.workspace }}/scoring_result.json" 2>/dev/null || true
+
+      - name: Verify Submission Target
+        run: |
+          if [ "${{ github.base_ref }}" != "evaluation" ]; then
+            echo "::error::Direct PRs must target the 'evaluation' branch. Received target: ${{ github.base_ref }}"
+            exit 1
+          fi
+          echo "Branch check passed: ${GITHUB_HEAD_REF} -> evaluation"
+
+      - name: Tag PR as Evaluation Only
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          echo "Applying 'do-not-merge' and 'evaluation-only' labels to PR #${PR_NUMBER}..."
+          curl -s -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/labels" \
+            -d '{"labels":["do-not-merge","evaluation-only"]}' >/dev/null 2>&1 || true
+
+      - name: Check Evaluation Cooldown
+        id: cooldown
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COOLDOWN: ${{ env.COOLDOWN_SECONDS }}
+        run: |
+          if [ "${COOLDOWN:-0}" -le 0 ]; then
+            echo "Cooldown disabled (COOLDOWN_SECONDS=${COOLDOWN}). Skipping check."
+            exit 0
+          fi
+
+          # Allow bypassing cooldown with [force-eval] in PR title or body
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_BODY="${{ github.event.pull_request.body }}"
+          if echo "${PR_TITLE} ${PR_BODY}" | grep -qi "\[force-eval\]"; then
+            echo "Force evaluation flag detected. Skipping cooldown check."
+            exit 0
+          fi
+
+          echo "Verifying last evaluation timestamp for PR #${PR_NUMBER}..."
+          CURRENT_TIME=$(date +%s)
+
+          LAST_RUN_DATE=$(curl -s \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/evaluate.yml/runs?status=completed&per_page=10" \
+            | jq -r '[.workflow_runs[] | select(.pull_requests[]?.number == ('"${PR_NUMBER}"'))] | first | .created_at // empty' 2>/dev/null || true)
+
+          if [ -n "${LAST_RUN_DATE}" ] && [ "${LAST_RUN_DATE}" != "null" ]; then
+            LAST_RUN_EPOCH=$(date -d "${LAST_RUN_DATE}" +%s 2>/dev/null || echo 0)
+            DIFF_SECONDS=$((CURRENT_TIME - LAST_RUN_EPOCH))
+
+            if [ ${DIFF_SECONDS} -lt ${COOLDOWN} ] && [ ${LAST_RUN_EPOCH} -gt 0 ]; then
+              REMAINING_MIN=$(( (${COOLDOWN} - DIFF_SECONDS) / 60 ))
+              ELAPSED_MIN=$(( DIFF_SECONDS / 60 ))
+
+              COMMENT="### ⏳ Evaluation rejected: cooldown active"$'\n\n'
+              COMMENT+="Your last evaluation occurred **${ELAPSED_MIN} minute(s)** ago."$'\n\n'
+              COMMENT+="To prevent random seed overfitting, please wait **${REMAINING_MIN} more minute(s)** before submitting a new commit."$'\n\n'
+              COMMENT+="*(Tip for instructors/testing: add \`[force-eval]\` in the PR title to bypass)*"
+
+              COMMENT_PAYLOAD=$(jq -n --arg body "${COMMENT}" '{body: $body}')
+              curl -s -X POST \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+                -d "${COMMENT_PAYLOAD}" >/dev/null 2>&1 || true
+
+              echo "::error::Cooldown active! Wait ${REMAINING_MIN} more minutes before submitting a new commit."
+              exit 1
+            fi
+          fi
+          echo "Cooldown check satisfied."
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create & Push Evaluation Archive Tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          STUDENT_LOGIN="${{ github.event.pull_request.user.login }}"
+          TAG_NAME="eval-${STUDENT_LOGIN}-$(date +'%Y%m%d-%H%M%S')-${GITHUB_SHA:0:7}"
+          git config user.name "Ocean Regatta Referee Bot"
+          git config user.email "bot@ocean-regatta.org"
+          git tag -a "${TAG_NAME}" -m "Archived evaluation run for PR #${{ github.event.pull_request.number }} by @${STUDENT_LOGIN}"
+          git push origin "${TAG_NAME}"
+          echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
+
+      - name: Prepare Evaluator Image
+        run: |
+          if docker image inspect ocean-regatta-evaluator:latest >/dev/null 2>&1; then
+            echo "Using pre-existing ocean-regatta-evaluator image..."
+          elif docker image inspect ocean-regatta-student-local:2026 >/dev/null 2>&1; then
+            echo "Tagging local student image as evaluator image..."
+            docker tag ocean-regatta-student-local:2026 ocean-regatta-evaluator:latest
+          else
+            echo "Building evaluator Docker image..."
+            docker build -f Dockerfile -t ocean-regatta-evaluator:latest .
+          fi
+
+      - name: Execute Isolated Docker Simulation
+        id: sim
+        timeout-minutes: 6
+        run: |
+          # Fresh output folder for this evaluation run
+          rm -rf "${{ github.workspace }}/output"
+          mkdir -p "${{ github.workspace }}/output"
+          chmod -R 777 "${{ github.workspace }}/output"
+
+          echo "Launching headless evaluation in Docker container..."
+          docker run --rm \
+            --network none \
+            --memory 4g \
+            --cpus 2 \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "${{ github.workspace }}:/workspace:rw" \
+            -v "${{ github.workspace }}/output:/workspace/output:rw" \
+            -v "${{ github.workspace }}/starter_kit/student_controller.py:/workspace/starter_kit/student_controller.py:ro" \
+            ocean-regatta-evaluator:latest \
+            bash /workspace/scripts/run_headless_eval.sh /workspace/worlds/evaluation_world.sdf /workspace/output 300
+
+      # Upload Artifact: ONLY run if the simulation step was executed
+      - name: Upload Simulation Playback Log
+        uses: actions/upload-artifact@v4
+        if: steps.sim.outcome == 'success' || steps.sim.outcome == 'failure'
+        with:
+          name: gz-replay-pr-${{ github.event.pull_request.number }}-${{ env.TAG_NAME }}
+          path: |
+            output/replay/
+            output/scoring_result.json
+          retention-days: 14
+
+      # Scoreboard Update: ONLY run if the simulation executed AND generated a scoring file
+      - name: Update Official Scoreboard on ocean-regatta.github.io
+        if: steps.sim.outcome == 'success' || steps.sim.outcome == 'failure'
+        env:
+          LEADERBOARD_PUSH_TOKEN: ${{ secrets.LEADERBOARD_PUSH_TOKEN }}
+          STUDENT_LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          RESULT_FILE="${{ github.workspace }}/output/scoring_result.json"
+
+          if [ ! -f "${RESULT_FILE}" ]; then
+            echo "::warning::Scoring result file missing, skipping scoreboard update."
+            exit 0
+          fi
+
+          if [ -z "${LEADERBOARD_PUSH_TOKEN}" ]; then
+            echo "::warning::LEADERBOARD_PUSH_TOKEN secret not set. Skipping push to ocean-regatta.github.io."
+            exit 0
+          fi
+
+          echo "Cloning ocean-regatta.github.io to sync scoreboard..."
+          rm -rf /tmp/scoreboard_repo
+          git clone "https://x-access-token:${LEADERBOARD_PUSH_TOKEN}@github.com/Ocean-Regatta/ocean-regatta.github.io.git" /tmp/scoreboard_repo
+
+          # Locate target leaderboard file
+          TARGET_DATA_FILE="/tmp/scoreboard_repo/docs/data/leaderboard.json"
+          if [ ! -f "${TARGET_DATA_FILE}" ] && [ -f "/tmp/scoreboard_repo/data/leaderboard.json" ]; then
+            TARGET_DATA_FILE="/tmp/scoreboard_repo/data/leaderboard.json"
+          fi
+
+          python3 "${{ github.workspace }}/scripts/update_leaderboard.py" \
+            --result "${RESULT_FILE}" \
+            --leaderboard "${TARGET_DATA_FILE}" \
+            --team "${STUDENT_LOGIN}"
+
+          # Mirror to 2026-edition specific and root data files if they exist in repo
+          if [ -f "/tmp/scoreboard_repo/docs/data/leaderboard_2026.json" ]; then
+            cp "${TARGET_DATA_FILE}" "/tmp/scoreboard_repo/docs/data/leaderboard_2026.json"
+          fi
+          if [ -f "/tmp/scoreboard_repo/data/leaderboard_2026.json" ]; then
+            cp "${TARGET_DATA_FILE}" "/tmp/scoreboard_repo/data/leaderboard_2026.json"
+          fi
+          if [ -f "/tmp/scoreboard_repo/data/leaderboard.json" ]; then
+            cp "${TARGET_DATA_FILE}" "/tmp/scoreboard_repo/data/leaderboard.json"
+          fi
+
+          cd /tmp/scoreboard_repo
+          git config user.name "Ocean Regatta Referee Bot"
+          git config user.email "bot@ocean-regatta.org"
+          git add -A
+          git commit -m "chore(scoreboard): update leaderboard for ${STUDENT_LOGIN} (${{ env.TAG_NAME }})" || echo "No leaderboard changes to commit."
+          git push origin main || git push origin master || echo "::warning::Failed to push updated scoreboard."
+          echo "Scoreboard successfully updated on ocean-regatta.github.io!"
+
+      # PR Comment: ONLY run if the simulation step was executed
+      - name: Publish Evaluation Report on Pull Request
+        if: steps.sim.outcome == 'success' || steps.sim.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          STUDENT_LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          RESULT_FILE="${{ github.workspace }}/output/scoring_result.json"
+
+          if [ ! -f "${RESULT_FILE}" ]; then
+            COMMENT="> ⚠️ **Evaluation Only**: This pull request is used exclusively to trigger automated grading. It will not and must not be merged into \`evaluation\`."$'\n\n'
+            COMMENT+="### ❌ Evaluation failed to produce scoring output"$'\n\n'
+            COMMENT+="Please review the simulation logs in the Actions tab."
+            COMMENT_PAYLOAD=$(jq -n --arg body "${COMMENT}" '{body: $body}')
+            curl -s -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              -d "${COMMENT_PAYLOAD}" >/dev/null 2>&1 || true
+            exit 1
+          fi
+
+          SUCCESS=$(jq -r '.success // false' "${RESULT_FILE}")
+          SCORE=$(jq -r '.score // 0' "${RESULT_FILE}")
+          MAX_SCORE=$(jq -r '.max_score // 22' "${RESULT_FILE}")
+          SIM_TIME=$(jq -r '.sim_time // 0' "${RESULT_FILE}")
+          REASON=$(jq -r '.reason // "UNKNOWN"' "${RESULT_FILE}")
+          WAYPOINTS=$(jq -r '.waypoints_cleared // 0' "${RESULT_FILE}")
+          TOTAL_WP=$(jq -r '.total_waypoints // 11' "${RESULT_FILE}")
+          COLLISION=$(jq -r '.collision // false' "${RESULT_FILE}")
+          PENALTIES=$(jq -r '.penalties // .total_penalties // 0' "${RESULT_FILE}")
+          # Ensure minimum floor score of 2.0 pts if no collision occurred
+          if [ "${COLLISION}" != "true" ]; then
+            SCORE=$(python3 -c "score = float('${SCORE}' or 0.0); print(max(2.0, score))" 2>/dev/null || echo "${SCORE}")
+          fi
+
+          if [ "${SUCCESS}" = "true" ]; then
+            STATUS_EMOJI="🏆 **COURSE COMPLETED**"
+            COLOR_ALERT="### 🟢 Result: Success!"
+          elif [ "${COLLISION}" = "true" ]; then
+            STATUS_EMOJI="💥 **COLLISION / CRITICAL IMPACT**"
+            COLOR_ALERT="### 🔴 Result: Collision"
+          else
+            STATUS_EMOJI="⏱️ **TIMED OUT / ABORTED**"
+            COLOR_ALERT="### 🟡 Result: Timed Out"
+          fi
+
+          PR_COMMENT="> ⚠️ **Evaluation Only**: This pull request is used exclusively to trigger automated grading. It will not and must not be merged into \`evaluation\`."$'\n\n'
+          PR_COMMENT+="${COLOR_ALERT}"$'\n\n'
+          PR_COMMENT+="| Metric | Result |"$'\n'
+          PR_COMMENT+="| :--- | :--- |"$'\n'
+          PR_COMMENT+="| **Status** | ${STATUS_EMOJI} |"$'\n'
+          PR_COMMENT+="| **Score Awarded** | **${SCORE} / ${MAX_SCORE} pts** |"$'\n'
+          PR_COMMENT+="| **Simulated Time** | ${SIM_TIME} s |"$'\n'
+          PR_COMMENT+="| **Waypoints Cleared** | ${WAYPOINTS} / ${TOTAL_WP} |"$'\n'
+          PR_COMMENT+="| **Penalties** | ${PENALTIES} pts |"$'\n'
+          PR_COMMENT+="| **Termination Reason** | \`${REASON}\` |"$'\n'
+          PR_COMMENT+="| **Archived Version Tag** | \`${{ env.TAG_NAME }}\` |"$'\n\n'
+          PR_COMMENT+="#### 📊 Live Scoreboard:"$'\n'
+          PR_COMMENT+="Check your standing and unlocked badges at [ocean-regatta.github.io/scoreboards/2026](https://ocean-regatta.github.io/scoreboards/2026/)"$'\n\n'
+          PR_COMMENT+="#### 🎥 Replay your run in 3D:"$'\n'
+          PR_COMMENT+="1. Download the artifact **\`gz-replay-pr-${PR_NUMBER}-${{ env.TAG_NAME }}\`** from the Actions run."$'\n'
+          PR_COMMENT+="2. Extract and launch locally:"$'\n'
+          PR_COMMENT+="\`\`\`bash"$'\n'
+          PR_COMMENT+="gz sim --playback ./output/replay"$'\n'
+          PR_COMMENT+="\`\`\`"$'\n'
+
+          echo "Posting evaluation report to PR #${PR_NUMBER} via GitHub API..."
+          COMMENT_PAYLOAD=$(jq -n --arg body "${PR_COMMENT}" '{body: $body}')
+          HTTP_CODE=$(curl -s -o /tmp/pr_comment_resp.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            -d "${COMMENT_PAYLOAD}")
+
+          if [ "${HTTP_CODE}" = "201" ]; then
+            echo "PR comment posted successfully (HTTP 201)!"
+          else
+            echo "::warning::Failed to post PR comment (HTTP ${HTTP_CODE}). Response:"
+            cat /tmp/pr_comment_resp.json 2>/dev/null || true
+          fi
+
+          echo "Evaluation workflow completed successfully with status: ${REASON} (Score: ${SCORE}/${MAX_SCORE} pts)"
+          exit 0

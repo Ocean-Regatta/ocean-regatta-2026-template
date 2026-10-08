@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package regatta.msgs;
+
+/// \brief Information for a single detected buoy in the sensor visibility cone.
+message BuoyObservation {
+  string name = 1;              // Unique buoy identifier (e.g. "gate_port_1", "cardinal_north")
+  string buoy_type = 2;         // Semantic type: "red", "green", "cardinal_north", "cardinal_south", "cardinal_east", "cardinal_west"
+  string type = 3;              // Convenient alias for buoy_type
+  double range = 4;             // Measured relative range in meters (with noise)
+  double bearing = 5;           // Measured relative bearing in radians [-pi, pi] (with noise, >0 port, <0 starboard)
+  double bearing_deg = 6;       // Measured relative bearing in degrees [-180, 180] (with noise)
+  double x = 7;                 // Measured body-relative surge coordinate (meters, with noise)
+  double y = 8;                 // Measured body-relative sway coordinate (meters, with noise)
+  double z = 9;                 // Measured body-relative heave coordinate (meters)
+  double range_true = 10;       // Ground-truth distance in meters (without noise)
+  double bearing_true = 11;     // Ground-truth bearing in radians (without noise)
+}
+
+/// \brief Array of all buoys currently observed in the sensor cone.
+message BuoyObservationArray {
+  double timestamp = 1;               // Simulation timestamp in seconds
+  repeated BuoyObservation buoys = 2; // Collection of detected buoys
+}

@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+output/
+local_output/
+scoring_result.json
+result.json
+*.log
+*.tlog
+.venv/
+venv/
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+plugins/build/
+*.so
+*.o
+*.a
