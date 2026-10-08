@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 *.pyd
 local_output/
+output/
 .venv/
 venv/
 .DS_Store

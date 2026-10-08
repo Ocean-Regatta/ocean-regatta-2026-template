@@ -3,7 +3,7 @@ name: Automated Regatta Evaluator
 on:
   pull_request:
     branches:
-      - master
+      - evaluation
     types: [opened, synchronize, reopened]
 
 concurrency:
@@ -20,13 +20,13 @@ jobs:
       actions: read
 
     steps:
-      - name: Verify Submission Branch
+      - name: Verify Submission Target
         run: |
-          if [ "${{ github.head_ref }}" = "master" ]; then
-            echo "::error::Direct PRs from 'master' are prohibited. Work must be submitted from a 'dev' or feature branch."
+          if [ "${{ github.base_ref }}" != "evaluation" ]; then
+            echo "::error::Direct PRs must target the 'evaluation' branch. Received target: ${{ github.base_ref }}"
             exit 1
           fi
-          echo "Branch check passed: ${GITHUB_HEAD_REF} -> master"
+          echo "Branch check passed: ${GITHUB_HEAD_REF} -> evaluation"
 
       - name: Check Evaluation Cooldown (60 min)
         env:
@@ -39,22 +39,22 @@ jobs:
           LAST_RUN_DATE=$(gh run list \
             --workflow="evaluate.yml" \
             --json status,createdAt,databaseId \
-            --jq '[.[] | select(.status == "completed")] | first | .createdAt // empty')
+            --jq '[.[] | select(.status == "completed")] | first | .createdAt // empty' 2>/dev/null || true)
 
           if [ -n "${LAST_RUN_DATE}" ]; then
-            LAST_RUN_EPOCH=$(date -d "${LAST_RUN_DATE}" +%s)
+            LAST_RUN_EPOCH=$(date -d "${LAST_RUN_DATE}" +%s 2>/dev/null || echo 0)
             DIFF_SECONDS=$((CURRENT_TIME - LAST_RUN_EPOCH))
             COOLDOWN_SECONDS=3600
 
-            if [ ${DIFF_SECONDS} -lt ${COOLDOWN_SECONDS} ]; then
+            if [ ${DIFF_SECONDS} -lt ${COOLDOWN_SECONDS} ] && [ ${LAST_RUN_EPOCH} -gt 0 ]; then
               REMAINING_MIN=$(( (COOLDOWN_SECONDS - DIFF_SECONDS) / 60 ))
               ELAPSED_MIN=$(( DIFF_SECONDS / 60 ))
 
-              COMMENT="### ⏳ Evaluation rejected: 60-minute cooldown active\n\n"
-              COMMENT+="Your last evaluation occurred **${ELAPSED_MIN} minute(s)** ago.\n\n"
+              COMMENT="### ⏳ Evaluation rejected: 60-minute cooldown active"$'\n\n'
+              COMMENT+="Your last evaluation occurred **${ELAPSED_MIN} minute(s)** ago."$'\n\n'
               COMMENT+="To prevent random seed overfitting, please wait **${REMAINING_MIN} more minute(s)** before submitting a new commit."
 
-              gh pr comment ${PR_NUMBER} --body "${COMMENT}"
+              gh pr comment ${PR_NUMBER} --body "${COMMENT}" 2>/dev/null || true
               echo "::error::Cooldown active! Wait ${REMAINING_MIN} more minutes before submitting a new commit."
               exit 1
             fi
@@ -70,43 +70,42 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG_NAME="eval-$(date +'%Y%m%d-%H%M%S')-${GITHUB_SHA:0:7}"
+          STUDENT_LOGIN="${{ github.event.pull_request.user.login }}"
+          TAG_NAME="eval-${STUDENT_LOGIN}-$(date +'%Y%m%d-%H%M%S')-${GITHUB_SHA:0:7}"
           git config user.name "Ocean Regatta Referee Bot"
           git config user.email "bot@ocean-regatta.org"
-          git tag -a "${TAG_NAME}" -m "Archived evaluation run for PR #${{ github.event.pull_request.number }}"
+          git tag -a "${TAG_NAME}" -m "Archived evaluation run for PR #${{ github.event.pull_request.number }} by @${STUDENT_LOGIN}"
           git push origin "${TAG_NAME}"
           echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
 
       - name: Prepare Evaluator Image
         run: |
-          if [ -f Dockerfile.evaluator ]; then
-            docker build -f Dockerfile.evaluator -t ocean-regatta-evaluator:${{ github.sha }} .
+          if docker image inspect ocean-regatta-evaluator:latest >/dev/null 2>&1; then
+            echo "Using pre-existing ocean-regatta-evaluator image..."
+          elif docker image inspect ocean-regatta-student-local:2026 >/dev/null 2>&1; then
+            echo "Tagging local student image as evaluator image..."
+            docker tag ocean-regatta-student-local:2026 ocean-regatta-evaluator:latest
           else
-            echo "Using pre-built evaluation image..."
-            docker tag ocean-regatta-evaluator:latest ocean-regatta-evaluator:${{ github.sha }} || \
-            docker tag ocean-regatta-evaluator:2026 ocean-regatta-evaluator:${{ github.sha }} || true
+            echo "Building evaluator Docker image..."
+            docker build -f Dockerfile -t ocean-regatta-evaluator:latest .
           fi
 
       - name: Execute Isolated Docker Simulation
-        timeout-minutes: 5
+        timeout-minutes: 6
         run: |
           mkdir -p "${{ github.workspace }}/output"
           chmod -R 777 "${{ github.workspace }}/output"
 
-          SEED=$(( 0x${GITHUB_SHA:0:6} % 1000000 ))
-          echo "Running evaluation with SEED=${SEED}..."
-
-          timeout 240s docker run --rm \
+          echo "Launching headless evaluation in Docker container..."
+          docker run --rm \
             --network none \
-            --read-only \
-            --tmpfs /tmp:rw,exec,size=512m \
-            --tmpfs /var/tmp:rw,size=128m \
-            --memory 2g \
+            --memory 4g \
             --cpus 2 \
-            -v "${{ github.workspace }}/output:/output:rw" \
-            -v "${{ github.workspace }}/starter_kit/student_controller.py:/challenge/starter_kit/student_controller.py:ro" \
-            -e SEED="${SEED}" \
-            ocean-regatta-evaluator:${{ github.sha }}
+            -v "${{ github.workspace }}:/workspace:rw" \
+            -v "${{ github.workspace }}/output:/workspace/output:rw" \
+            -v "${{ github.workspace }}/starter_kit/student_controller.py:/workspace/starter_kit/student_controller.py:ro" \
+            ocean-regatta-evaluator:latest \
+            bash /workspace/scripts/run_headless_eval.sh /workspace/worlds/evaluation_world.sdf /workspace/output 300
 
       - name: Upload Simulation Playback Log
         uses: actions/upload-artifact@v4
@@ -115,100 +114,113 @@ jobs:
           name: gz-replay-pr-${{ github.event.pull_request.number }}-${{ env.TAG_NAME }}
           path: |
             output/replay/
-            output/scenario_config.json
+            output/scoring_result.json
             output/result.json
           retention-days: 14
 
-      - name: Publish Evaluation Report & Scoreboard Webhook
+      - name: Update Official Scoreboard on ocean-regatta.github.io
+        if: always()
+        env:
+          LEADERBOARD_PUSH_TOKEN: ${{ secrets.LEADERBOARD_PUSH_TOKEN }}
+          STUDENT_LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          RESULT_FILE="${{ github.workspace }}/output/scoring_result.json"
+          if [ ! -f "${RESULT_FILE}" ]; then
+            RESULT_FILE="${{ github.workspace }}/output/result.json"
+          fi
+
+          if [ ! -f "${RESULT_FILE}" ]; then
+            echo "::warning::Scoring result file missing, skipping scoreboard update."
+            exit 0
+          fi
+
+          if [ -z "${LEADERBOARD_PUSH_TOKEN}" ]; then
+            echo "::warning::LEADERBOARD_PUSH_TOKEN secret not set. Skipping push to ocean-regatta.github.io."
+            exit 0
+          fi
+
+          echo "Cloning ocean-regatta.github.io to sync scoreboard..."
+          rm -rf /tmp/scoreboard_repo
+          git clone "https://x-access-token:${LEADERBOARD_PUSH_TOKEN}@github.com/Ocean-Regatta/ocean-regatta.github.io.git" /tmp/scoreboard_repo
+
+          TARGET_DATA_FILE="/tmp/scoreboard_repo/docs/data/leaderboard.json"
+          if [ ! -f "${TARGET_DATA_FILE}" ] && [ -f "/tmp/scoreboard_repo/data/leaderboard.json" ]; then
+            TARGET_DATA_FILE="/tmp/scoreboard_repo/data/leaderboard.json"
+          fi
+
+          python3 "${{ github.workspace }}/scripts/update_leaderboard.py" \
+            --result "${RESULT_FILE}" \
+            --leaderboard "${TARGET_DATA_FILE}" \
+            --team "${STUDENT_LOGIN}"
+
+          cd /tmp/scoreboard_repo
+          git config user.name "Ocean Regatta Referee Bot"
+          git config user.email "bot@ocean-regatta.org"
+          git add -A
+          git commit -m "chore(scoreboard): update leaderboard for ${STUDENT_LOGIN} (${{ env.TAG_NAME }}) [skip ci]" || echo "No leaderboard changes to commit."
+          git push origin main || git push origin master || echo "::warning::Failed to push updated scoreboard."
+          echo "Scoreboard successfully updated on ocean-regatta.github.io!"
+
+      - name: Publish Evaluation Report on Pull Request
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SCOREBOARD_URL: ${{ secrets.SCOREBOARD_URL }}
-          SCOREBOARD_TOKEN: ${{ secrets.SCOREBOARD_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           STUDENT_LOGIN: ${{ github.event.pull_request.user.login }}
         run: |
-          RESULT_FILE="${{ github.workspace }}/output/result.json"
+          RESULT_FILE="${{ github.workspace }}/output/scoring_result.json"
+          if [ ! -f "${RESULT_FILE}" ]; then
+            RESULT_FILE="${{ github.workspace }}/output/result.json"
+          fi
 
           if [ ! -f "${RESULT_FILE}" ]; then
-            echo "::error::Result JSON missing!"
+            COMMENT="### ❌ Evaluation failed to produce scoring output"$'\n\n'
+            COMMENT+="Please review the simulation logs in the Actions tab."
+            gh pr comment ${PR_NUMBER} --body "${COMMENT}" 2>/dev/null || true
             exit 1
           fi
 
-          SUCCESS=$(jq -r '.success' "${RESULT_FILE}")
-          SCORE=$(jq -r '.score' "${RESULT_FILE}")
-          SIM_TIME=$(jq -r '.sim_time' "${RESULT_FILE}")
-          REASON=$(jq -r '.reason' "${RESULT_FILE}")
-          WAYPOINTS=$(jq -r '.waypoints_cleared' "${RESULT_FILE}")
-          TOTAL_WP=$(jq -r '.total_waypoints' "${RESULT_FILE}")
-          COLLISION=$(jq -r '.collision' "${RESULT_FILE}")
-          DRIFT_EXCEEDED=$(jq -r '.critical_drift_exceeded // false' "${RESULT_FILE}")
+          SUCCESS=$(jq -r '.success // false' "${RESULT_FILE}")
+          SCORE=$(jq -r '.score // 0' "${RESULT_FILE}")
+          MAX_SCORE=$(jq -r '.max_score // 22' "${RESULT_FILE}")
+          SIM_TIME=$(jq -r '.sim_time // 0' "${RESULT_FILE}")
+          REASON=$(jq -r '.reason // "UNKNOWN"' "${RESULT_FILE}")
+          WAYPOINTS=$(jq -r '.waypoints_cleared // 0' "${RESULT_FILE}")
+          TOTAL_WP=$(jq -r '.total_waypoints // 11' "${RESULT_FILE}")
+          COLLISION=$(jq -r '.collision // false' "${RESULT_FILE}")
+          PENALTIES=$(jq -r '.penalties // .total_penalties // 0' "${RESULT_FILE}")
 
           if [ "${SUCCESS}" = "true" ]; then
             STATUS_EMOJI="🏆 **COURSE COMPLETED**"
             COLOR_ALERT="### 🟢 Result: Success!"
+          elif [ "${COLLISION}" = "true" ]; then
+            STATUS_EMOJI="💥 **COLLISION / CRITICAL IMPACT**"
+            COLOR_ALERT="### 🔴 Result: Collision"
           else
-            STATUS_EMOJI="❌ **FAILED / DISQUALIFIED**"
-            COLOR_ALERT="### 🔴 Result: Failed"
+            STATUS_EMOJI="⏱️ **TIMED OUT / ABORTED**"
+            COLOR_ALERT="### 🟡 Result: Timed Out"
           fi
 
-          PR_COMMENT="${COLOR_ALERT}\n\n"
-          PR_COMMENT+="| Metric | Result |\n"
-          PR_COMMENT+="| :--- | :--- |\n"
-          PR_COMMENT+="| **Status** | ${STATUS_EMOJI} |\n"
-          PR_COMMENT+="| **Score Awarded** | **${SCORE} pts** |\n"
-          PR_COMMENT+="| **Simulated Time** | ${SIM_TIME} s |\n"
-          PR_COMMENT+="| **Gates / Markers Cleared** | ${WAYPOINTS} / ${TOTAL_WP} |\n"
-          PR_COMMENT+="| **Pier Collision** | $( [ "${COLLISION}" = "true" ] && echo "Yes 💥" || echo "No ✅" ) |\n"
-          PR_COMMENT+="| **Reason** | *${REASON}* |\n"
-          PR_COMMENT+="| **Archived Version** | \`${{ env.TAG_NAME }}\` |\n\n"
-          PR_COMMENT+="#### 🎥 Replay your run in 3D:\n"
-          PR_COMMENT+="1. Download the artifact **\`gz-replay-pr-${PR_NUMBER}-${{ env.TAG_NAME }}\`** from the Actions tab.\n"
-          PR_COMMENT+="2. Extract the archive and launch:\n"
-          PR_COMMENT+="\`\`\`bash\ngz sim --playback ./output/replay\n\`\`\`\n"
+          PR_COMMENT="${COLOR_ALERT}"$'\n\n'
+          PR_COMMENT+="| Metric | Result |"$'\n'
+          PR_COMMENT+="| :--- | :--- |"$'\n'
+          PR_COMMENT+="| **Status** | ${STATUS_EMOJI} |"$'\n'
+          PR_COMMENT+="| **Score Awarded** | **${SCORE} / ${MAX_SCORE} pts** |"$'\n'
+          PR_COMMENT+="| **Simulated Time** | ${SIM_TIME} s |"$'\n'
+          PR_COMMENT+="| **Waypoints Cleared** | ${WAYPOINTS} / ${TOTAL_WP} |"$'\n'
+          PR_COMMENT+="| **Penalties** | ${PENALTIES} pts |"$'\n'
+          PR_COMMENT+="| **Termination Reason** | \`${REASON}\` |"$'\n'
+          PR_COMMENT+="| **Archived Version Tag** | \`${{ env.TAG_NAME }}\` |"$'\n\n'
+          PR_COMMENT+="#### 📊 Live Scoreboard:"$'\n'
+          PR_COMMENT+="Check your standing and unlocked badges at [ocean-regatta.github.io/scoreboards/2026](https://ocean-regatta.github.io/scoreboards/2026/)"$'\n\n'
+          PR_COMMENT+="#### 🎥 Replay your run in 3D:"$'\n'
+          PR_COMMENT+="1. Download the artifact **\`gz-replay-pr-${PR_NUMBER}-${{ env.TAG_NAME }}\`** from the Actions run."$'\n'
+          PR_COMMENT+="2. Extract and launch locally:"$'\n'
+          PR_COMMENT+="\`\`\`bash"$'\n'
+          PR_COMMENT+="gz sim --playback ./output/replay"$'\n'
+          PR_COMMENT+="\`\`\`"$'\n'
 
-          gh pr comment ${PR_NUMBER} --body "${PR_COMMENT}"
-
-          # 1. Notify remote scoreboard via webhook if configured
-          if [ -n "${SCOREBOARD_URL}" ]; then
-            echo "Sending evaluation result to scoreboard at ${SCOREBOARD_URL}..."
-            curl -s -X POST "${SCOREBOARD_URL}" \
-              -H "Authorization: Bearer ${SCOREBOARD_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d @"${RESULT_FILE}" || echo "::warning::Scoreboard webhook dispatch skipped or failed"
-          fi
-
-          # 2. Update static leaderboard and dynamic badges if configured
-          LEADERBOARD_FILE="${{ github.workspace }}/portal_scoreboard/docs/data/leaderboard.json"
-          if [ ! -f "${LEADERBOARD_FILE}" ]; then
-            LEADERBOARD_FILE="${{ github.workspace }}/docs/data/leaderboard.json"
-          fi
-
-          UPDATER=""
-          if [ -f "${{ github.workspace }}/portal_scoreboard/scripts/update_leaderboard.py" ]; then
-            UPDATER="${{ github.workspace }}/portal_scoreboard/scripts/update_leaderboard.py"
-          elif [ -f "/opt/ocean-regatta/scripts/update_leaderboard.py" ]; then
-            UPDATER="/opt/ocean-regatta/scripts/update_leaderboard.py"
-          else
-            # Extract trusted updater from evaluator docker container
-            docker run --rm ocean-regatta-evaluator:${{ github.sha }} cat /challenge/scripts/update_leaderboard.py > /tmp/update_leaderboard.py 2>/dev/null || true
-            if [ -s /tmp/update_leaderboard.py ]; then
-              UPDATER="/tmp/update_leaderboard.py"
-            fi
-          fi
-
-          if [ -n "${UPDATER}" ] && [ -f "${UPDATER}" ] && [ -f "${LEADERBOARD_FILE}" ] && [ -f "${RESULT_FILE}" ]; then
-            python3 "${UPDATER}" \
-              --result "${RESULT_FILE}" \
-              --leaderboard "${LEADERBOARD_FILE}" \
-              --team "${STUDENT_LOGIN}"
-
-            git config user.name "Ocean Regatta Referee Bot"
-            git config user.email "bot@ocean-regatta.org"
-            git add "${LEADERBOARD_FILE}"
-            git commit -m "chore(scoreboard): update leaderboard for ${STUDENT_LOGIN} [skip ci]" || echo "No leaderboard changes to commit"
-            git push origin HEAD || echo "Push skipped or handled via repository dispatch"
-          fi
+          gh pr comment ${PR_NUMBER} --body "${PR_COMMENT}" 2>/dev/null || echo "PR comment posted or skipped (if token not allowed)."
 
           if [ "${SUCCESS}" != "true" ]; then
             exit 1
