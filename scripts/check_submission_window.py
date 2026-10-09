@@ -18,6 +18,11 @@ def parse_iso_datetime(dt_input: Any, default_tz=timezone.utc) -> datetime:
     Parses an ISO 8601 string or numeric timestamp into an aware UTC datetime object.
     Supports 'Z' suffix, numeric epochs, and offset strings (e.g., '+02:00').
     """
+    if isinstance(dt_input, datetime):
+        if dt_input.tzinfo is None:
+            return dt_input.replace(tzinfo=default_tz).astimezone(timezone.utc)
+        return dt_input.astimezone(timezone.utc)
+
     if isinstance(dt_input, (int, float)):
         return datetime.fromtimestamp(dt_input, tz=timezone.utc)
 

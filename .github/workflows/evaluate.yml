@@ -29,280 +29,40 @@ jobs:
       actions: read
 
     steps:
-      - name: Verify Submission Target
-        run: |
-          if [ "${{ github.base_ref }}" != "evaluation" ]; then
-            echo "::error::Direct PRs must target the 'evaluation' branch. Received target: ${{ github.base_ref }}"
-            exit 1
-          fi
-          echo "Branch check passed: ${GITHUB_HEAD_REF} -> evaluation"
+      - name: Checkout Base Branch (Trusted Pre-Checks)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          fetch-depth: 0
 
-      - name: Verify Participant Registration
-        id: participant_check
+      - name: Verify Submission Pre-Checks
+        id: pre_checks
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           STUDENT_LOGIN: ${{ github.event.pull_request.user.login }}
-        run: |
-          echo "Verifying competitor registration for @${STUDENT_LOGIN}..."
-          LOGIN_LOWER=$(echo "${STUDENT_LOGIN}" | tr '[:upper:]' '[:lower:]')
-
-          # Always fetch participants.json from the base branch to prevent untrusted PR tampering
-          HTTP_CODE=$(curl -s -o /tmp/raw_participants_resp.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/contents/participants.json?ref=${{ github.base_ref }}")
-
-          if [ "${HTTP_CODE}" = "200" ]; then
-            jq -r '.content' /tmp/raw_participants_resp.json | base64 -d > /tmp/participants.json
-          elif [ -f "${{ github.workspace }}/participants.json" ]; then
-            echo "::warning::Base branch API fetch returned ${HTTP_CODE}. Using runner workspace copy."
-            cp "${{ github.workspace }}/participants.json" /tmp/participants.json
-          else
-            echo "::error::participants.json registry not found on ${{ github.base_ref }}."
-            exit 1
-          fi
-
-          IS_APPROVED=$(jq -r --arg user "${LOGIN_LOWER}" '
-            if .participants[$user] and (.participants[$user].status == "approved" or .participants[$user].status == null) then
-              "true"
-            else
-              "false"
-            end
-          ' /tmp/participants.json 2>/dev/null || echo "false")
-
-          if [ "${IS_APPROVED}" != "true" ]; then
-            echo "::error::Competitor @${STUDENT_LOGIN} is not registered or approved on the participant registry!"
-
-            # Tag PR with unregistered label
-            curl -s -X POST \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/labels" \
-              -d '{"labels":["unregistered"]}' >/dev/null 2>&1 || true
-
-            COMMENT="> ⛔ **Evaluation Aborted: Unregistered Competitor**"$'\n\n'
-            COMMENT+="Hello @${STUDENT_LOGIN}!"$'\n\n'
-            COMMENT+="Your pull request was not evaluated because your GitHub username is not on the verified participant list for **Ocean Regatta 2026**."$'\n\n'
-            COMMENT+="To prevent unauthorized resource consumption on our simulation servers, automated evaluations run exclusively for registered competitors."$'\n\n'
-            COMMENT+="### 📝 How to Register:"$'\n'
-            COMMENT+="1. Visit the [Registration Guide on ocean-regatta.github.io](https://ocean-regatta.github.io/register/)."$'\n'
-            COMMENT+="2. Open a [Competitor Registration Request](https://github.com/${{ github.repository }}/issues/new?template=registration_request.yml&title=%5BRegistration%5D%3A+%40${STUDENT_LOGIN}&github_username=${STUDENT_LOGIN}) issue."$'\n'
-            COMMENT+="3. Once approved by the organizers, simply push a new commit or close & reopen this PR to launch your evaluation run."$'\n\n'
-            COMMENT+="*(If your team is registered under a different handle, please notify the organizers)*"
-
-            COMMENT_PAYLOAD=$(jq -n --arg body "${COMMENT}" '{body: $body}')
-            curl -s -X POST \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-              -d "${COMMENT_PAYLOAD}" >/dev/null 2>&1 || true
-
-            exit 1
-          fi
-
-          DISPLAY_NAME=$(jq -r --arg user "${LOGIN_LOWER}" '.participants[$user].display_name // .participants[$user].team // empty' /tmp/participants.json 2>/dev/null || true)
-          TEAM_NAME=$(jq -r --arg user "${LOGIN_LOWER}" '.participants[$user].team // empty' /tmp/participants.json 2>/dev/null || true)
-          USER_EDITION=$(jq -r --arg user "${LOGIN_LOWER}" '.participants[$user].edition // empty' /tmp/participants.json 2>/dev/null || true)
-          echo "DISPLAY_NAME=${DISPLAY_NAME:-${STUDENT_LOGIN}}" >> $GITHUB_ENV
-          echo "TEAM_NAME=${TEAM_NAME:-${STUDENT_LOGIN}}" >> $GITHUB_ENV
-          echo "USER_EDITION=${USER_EDITION}" >> $GITHUB_ENV
-          echo "Registration verified for @${STUDENT_LOGIN} ('${DISPLAY_NAME:-${STUDENT_LOGIN}}'). Proceeding with evaluation."
-
-      - name: Verify Submission Window
-        id: submission_window
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          STUDENT_LOGIN: ${{ github.event.pull_request.user.login }}
-          DISPLAY_NAME: ${{ env.DISPLAY_NAME }}
-          TEAM_NAME: ${{ env.TEAM_NAME }}
-          USER_EDITION: ${{ env.USER_EDITION }}
-          REGATTA_EDITION: ${{ env.REGATTA_EDITION }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
           PR_UPDATED_AT: ${{ github.event.pull_request.updated_at }}
           PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
+          COOLDOWN_SECONDS: ${{ env.COOLDOWN_SECONDS }}
+          REGATTA_EDITION: ${{ env.REGATTA_EDITION }}
         run: |
-          echo "Verifying submission window for PR #${PR_NUMBER} by @${STUDENT_LOGIN}..."
+          python3 scripts/verify_submission.py
 
-          # Allow bypassing submission window with [force-eval] in PR title or body
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          PR_BODY="${{ github.event.pull_request.body }}"
-          if echo "${PR_TITLE} ${PR_BODY}" | grep -qi "\[force-eval\]"; then
-            echo "Force evaluation flag detected. Skipping submission window check."
-            exit 0
-          fi
-
-          # Always fetch editions.json from base branch to prevent untrusted PR tampering
-          HTTP_CODE_ED=$(curl -s -o /tmp/raw_editions_resp.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/contents/editions.json?ref=${{ github.base_ref }}")
-
-          if [ "${HTTP_CODE_ED}" = "200" ]; then
-            jq -r '.content' /tmp/raw_editions_resp.json | base64 -d > /tmp/editions.json
-          elif [ -f "${{ github.workspace }}/editions.json" ]; then
-            echo "::warning::Base branch API fetch returned ${HTTP_CODE_ED}. Using runner workspace copy."
-            cp "${{ github.workspace }}/editions.json" /tmp/editions.json
-          else
-            echo "::warning::editions.json not found on ${{ github.base_ref }}. Skipping window check."
-            exit 0
-          fi
-
-          # Always fetch scripts/check_submission_window.py from base branch
-          HTTP_CODE_PY=$(curl -s -o /tmp/raw_py_resp.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/contents/scripts/check_submission_window.py?ref=${{ github.base_ref }}")
-
-          if [ "${HTTP_CODE_PY}" = "200" ]; then
-            jq -r '.content' /tmp/raw_py_resp.json | base64 -d > /tmp/check_submission_window.py
-          elif [ -f "${{ github.workspace }}/scripts/check_submission_window.py" ]; then
-            cp "${{ github.workspace }}/scripts/check_submission_window.py" /tmp/check_submission_window.py
-          else
-            echo "::error::check_submission_window.py script not found on ${{ github.base_ref }} or workspace."
-            exit 1
-          fi
-
-          TARGET_EDITION="${USER_EDITION:-${REGATTA_EDITION:-2026}}"
-          SUBMISSION_TS="${PR_UPDATED_AT:-${PR_CREATED_AT}}"
-
-          set +e
-          python3 /tmp/check_submission_window.py check \
-            --file /tmp/editions.json \
-            --edition "${TARGET_EDITION}" \
-            ${SUBMISSION_TS:+--submission-time "${SUBMISSION_TS}"} \
-            --username "${STUDENT_LOGIN}" \
-            --display-name "${DISPLAY_NAME:-${STUDENT_LOGIN}}" \
-            --team "${TEAM_NAME:-${STUDENT_LOGIN}}" \
-            --participants-file /tmp/participants.json \
-            --comment-file /tmp/window_comment.md \
-            --json-file /tmp/window_result.json
-          CHECK_STATUS=$?
-          set -e
-
-          if [ ${CHECK_STATUS} -eq 0 ]; then
-            echo "Submission window verified successfully for edition '${TARGET_EDITION}'."
-
-            # Clean up prior rejection labels if present
-            curl -s -X DELETE \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/labels/submission-too-early" >/dev/null 2>&1 || true
-            curl -s -X DELETE \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/labels/submission-closed" >/dev/null 2>&1 || true
-
-            exit 0
-          fi
-
-          REASON_STATUS=$(jq -r '.status // empty' /tmp/window_result.json 2>/dev/null || echo "rejected")
-          LABEL="submission-rejected"
-          if [ "${REASON_STATUS}" = "too_early" ] || [ ${CHECK_STATUS} -eq 1 ]; then
-            LABEL="submission-too-early"
-          elif [ "${REASON_STATUS}" = "too_late" ] || [ ${CHECK_STATUS} -eq 2 ]; then
-            LABEL="submission-closed"
-          fi
-
-          # Tag PR with window label
-          curl -s -X POST \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/labels" \
-            -d "{\"labels\":[\"${LABEL}\"]}" >/dev/null 2>&1 || true
-
-          # Post personalised comment to PR
-          if [ -f /tmp/window_comment.md ]; then
-            COMMENT_PAYLOAD=$(jq -Rs --arg body "$(< /tmp/window_comment.md)" '{body: $body}')
-          else
-            COMMENT_PAYLOAD=$(jq -n --arg body "> ⛔ **Evaluation Aborted**: Submission outside allowed competition window." '{body: $body}')
-          fi
-
-          curl -s -X POST \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-            -d "${COMMENT_PAYLOAD}" >/dev/null 2>&1 || true
-
-          exit 1
+      - name: Checkout Submitted PR Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Purge Runner Workspace Stale Outputs and Permissions
         run: |
           docker run --rm -v "${{ github.workspace }}:/workspace" ubuntu bash -c "rm -rf /workspace/output /workspace/scoring_result.json /workspace/starter_kit/__pycache__; chown -R $(id -u):$(id -g) /workspace 2>/dev/null || true" 2>/dev/null || true
           rm -rf "${{ github.workspace }}/output" "${{ github.workspace }}/starter_kit/__pycache__" 2>/dev/null || true
           rm -f "${{ github.workspace }}/scoring_result.json" 2>/dev/null || true
-
-      - name: Tag PR as Evaluation Only
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          echo "Applying 'do-not-merge' and 'evaluation-only' labels to PR #${PR_NUMBER}..."
-          curl -s -X POST \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/labels" \
-            -d '{"labels":["do-not-merge","evaluation-only"]}' >/dev/null 2>&1 || true
-
-      - name: Check Evaluation Cooldown
-        id: cooldown
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          COOLDOWN: ${{ env.COOLDOWN_SECONDS }}
-        run: |
-          if [ "${COOLDOWN:-0}" -le 0 ]; then
-            echo "Cooldown disabled (COOLDOWN_SECONDS=${COOLDOWN}). Skipping check."
-            exit 0
-          fi
-
-          # Allow bypassing cooldown with [force-eval] in PR title or body
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          PR_BODY="${{ github.event.pull_request.body }}"
-          if echo "${PR_TITLE} ${PR_BODY}" | grep -qi "\[force-eval\]"; then
-            echo "Force evaluation flag detected. Skipping cooldown check."
-            exit 0
-          fi
-
-          echo "Verifying last evaluation timestamp for PR #${PR_NUMBER}..."
-          CURRENT_TIME=$(date +%s)
-
-          LAST_RUN_DATE=$(curl -s \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/evaluate.yml/runs?status=completed&per_page=10" \
-            | jq -r '[.workflow_runs[] | select(.pull_requests[]?.number == ('"${PR_NUMBER}"'))] | first | .created_at // empty' 2>/dev/null || true)
-
-          if [ -n "${LAST_RUN_DATE}" ] && [ "${LAST_RUN_DATE}" != "null" ]; then
-            LAST_RUN_EPOCH=$(date -d "${LAST_RUN_DATE}" +%s 2>/dev/null || echo 0)
-            DIFF_SECONDS=$((CURRENT_TIME - LAST_RUN_EPOCH))
-
-            if [ ${DIFF_SECONDS} -lt ${COOLDOWN} ] && [ ${LAST_RUN_EPOCH} -gt 0 ]; then
-              REMAINING_MIN=$(( (${COOLDOWN} - DIFF_SECONDS) / 60 ))
-              ELAPSED_MIN=$(( DIFF_SECONDS / 60 ))
-
-              COMMENT="### ⏳ Evaluation rejected: cooldown active"$'\n\n'
-              COMMENT+="Your last evaluation occurred **${ELAPSED_MIN} minute(s)** ago."$'\n\n'
-              COMMENT+="To prevent random seed overfitting, please wait **${REMAINING_MIN} more minute(s)** before submitting a new commit."$'\n\n'
-              COMMENT+="*(Tip for instructors/testing: add \`[force-eval]\` in the PR title to bypass)*"
-
-              COMMENT_PAYLOAD=$(jq -n --arg body "${COMMENT}" '{body: $body}')
-              curl -s -X POST \
-                -H "Authorization: Bearer ${GH_TOKEN}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-                -d "${COMMENT_PAYLOAD}" >/dev/null 2>&1 || true
-
-              echo "::error::Cooldown active! Wait ${REMAINING_MIN} more minutes before submitting a new commit."
-              exit 1
-            fi
-          fi
-          echo "Cooldown check satisfied."
-
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Create & Push Evaluation Archive Tag
         env:
